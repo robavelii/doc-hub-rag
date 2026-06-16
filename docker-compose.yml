@@ -1,0 +1,212 @@
+name: Doc-Hub
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ragdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_dev_password}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  migrate:
+    build: ./backend
+    environment:
+      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ragdb
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:-app_user_dev_password}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+
+  seed:
+    build: ./backend
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+    volumes:
+      - ./backend:/app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: python scripts/seed.py
+    restart: "no"
+
+  backend:
+    build: ./backend
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:-app_user_dev_password}
+      S3_ENDPOINT: http://minio:9000
+      OLLAMA_BASE_URL: http://ollama:11434
+      EMBEDDING_PROVIDER: ollama
+      EMBEDDING_DIMENSIONS: "768"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+  celery_worker:
+    build: ./backend
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:-app_user_dev_password}
+      S3_ENDPOINT: http://minio:9000
+      OLLAMA_BASE_URL: http://ollama:11434
+      EMBEDDING_PROVIDER: ollama
+      EMBEDDING_DIMENSIONS: "768"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    restart: unless-stopped
+
+  celery_beat:
+    build: ./backend
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD:-app_user_dev_password}@postgres:5432/ragdb
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD:-app_user_dev_password}
+      S3_ENDPOINT: http://minio:9000
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: celery -A app.workers.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [local-ai]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  ollama_init:
+    image: ollama/ollama:latest
+    profiles: [local-ai]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        ollama pull nomic-embed-text
+        ollama pull llama3.2:1b
+        echo "Ollama models ready"
+    restart: "no"
+
+  landing:
+    build:
+      context: ./frontend
+      dockerfile: landing/Dockerfile
+      args:
+        VITE_DASHBOARD_URL: http://localhost:3000
+    ports:
+      - "8081:80"
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./frontend
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  widget_cdn:
+    build:
+      context: ./frontend
+      dockerfile: widget/Dockerfile
+    ports:
+      - "3002:80"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
+  ollama_data:
