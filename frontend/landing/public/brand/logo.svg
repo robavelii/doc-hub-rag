@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="cf-grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1dd89b"/>
+      <stop offset="1" stop-color="#60a5fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="40" height="40" rx="10" fill="url(#cf-grad)" opacity="0.15"/>
+  <path d="M12 14h16v3H12v-3zm0 6h12v3H12v-3zm0 6h8v3h-8v-3z" fill="url(#cf-grad)"/>
+  <circle cx="30" cy="26" r="4" fill="#1dd89b" opacity="0.9"/>
+</svg>

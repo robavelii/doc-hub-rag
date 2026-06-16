@@ -1,0 +1,33 @@
+@import '../../assets/brand/brand.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background: var(--brand-bg);
+  color: var(--brand-text);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mesh-bg {
+  background:
+    radial-gradient(at 20% 20%, rgba(29, 216, 155, 0.08) 0%, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(96, 165, 250, 0.06) 0%, transparent 50%),
+    var(--brand-bg);
+}
+
+.glass {
+  background: var(--brand-glass-bg);
+  backdrop-filter: blur(var(--brand-glass-blur));
+  border: 1px solid var(--brand-glass-border);
+}
+
+.gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
