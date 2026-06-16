@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RAG Widget Demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 4rem auto; padding: 0 2rem; }
+    h1 { color: #1d9e75; }
+  </style>
+</head>
+<body>
+  <h1>Acme Corp</h1>
+  <p>Welcome to our demo landing page. Click the chat button to ask questions about our docs.</p>
+  <div id="my-assistant"></div>
+  <script src="./dist/widget.js"></script>
+  <script>
+    RAGWidget.init({
+      apiKey: 'YOUR_API_KEY_HERE',
+      containerId: 'my-assistant',
+      primaryColor: '#1D9E75',
+      apiBase: 'http://localhost:8000'
+    })
+  </script>
+</body>
+</html>
