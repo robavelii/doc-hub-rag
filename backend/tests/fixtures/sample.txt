@@ -1,0 +1,3 @@
+Doc-Hub sample document for parser and ingestion tests.
+This text contains enough content to produce multiple chunks when split.
+Acme Corporation offers a 30-day refund policy and 24/7 customer support.
