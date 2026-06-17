@@ -3,33 +3,53 @@ name: Doc-Hub
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    container_name: doc_hub_postgres
+    env_file: .env.prod
     environment:
       POSTGRES_DB: ragdb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ragdb"]
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 2G
     restart: unless-stopped
     networks: [internal]
 
   redis:
     image: redis:7-alpine
+    container_name: doc_hub_redis
+    env_file: .env.prod
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 512M
     restart: unless-stopped
     networks: [internal]
 
   minio:
     image: minio/minio:latest
+    container_name: doc_hub_minio
+    env_file: .env.prod
     command: server /data
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
@@ -46,9 +66,11 @@ services:
 
   migrate:
     build: ./backend
-    env_file: backend/.env
+    container_name: doc_hub_migrate
+    env_file: .env.prod
     environment:
-      DATABASE_SYNC_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ragdb
+      DATABASE_SYNC_URL: ${DATABASE_MIGRATE_URL}
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,17 +78,28 @@ services:
     restart: "no"
     networks: [internal]
 
-  backend:
+  seed:
     build: ./backend
-    env_file: backend/.env
-    environment:
-      APP_ENV: production
-      DATABASE_URL: postgresql+asyncpg://app_user:${DATABASE_APP_PASSWORD}@postgres:5432/ragdb
-      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD}@postgres:5432/ragdb
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      S3_ENDPOINT: http://minio:9000
+    container_name: doc_hub_seed
+    env_file: .env.prod
     depends_on:
       migrate:
+        condition: service_completed_successfully
+    command: python scripts/seed.py
+    restart: "no"
+    networks: [internal]
+
+  backend:
+    build: ./backend
+    container_name: doc_hub_backend
+    env_file: .env.prod
+    environment:
+      APP_ENV: production
+      S3_ENDPOINT: http://minio:9000
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      seed:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
@@ -78,30 +111,36 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 2G
     restart: unless-stopped
-    networks: [internal, web]
+    networks: [internal, app]
 
   celery_worker:
     build: ./backend
-    env_file: backend/.env
+    container_name: doc_hub_celery_worker
+    env_file: .env.prod
     environment:
-      DATABASE_URL: postgresql+asyncpg://app_user:${DATABASE_APP_PASSWORD}@postgres:5432/ragdb
-      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD}@postgres:5432/ragdb
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       S3_ENDPOINT: http://minio:9000
     depends_on:
       backend:
         condition: service_healthy
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 2G
     restart: unless-stopped
     networks: [internal]
 
   celery_beat:
     build: ./backend
-    env_file: backend/.env
-    environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      DATABASE_SYNC_URL: postgresql://app_user:${DATABASE_APP_PASSWORD}@postgres:5432/ragdb
+    container_name: doc_hub_celery_beat
+    env_file: .env.prod
     depends_on:
       redis:
         condition: service_healthy
@@ -109,51 +148,48 @@ services:
     restart: unless-stopped
     networks: [internal]
 
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    depends_on:
-      - backend
-      - dashboard
-      - landing
-      - widget_cdn
-    restart: unless-stopped
-    networks: [web]
-
   landing:
     build:
       context: ./frontend
       dockerfile: landing/Dockerfile
+      args:
+        VITE_DASHBOARD_URL: ${VITE_DASHBOARD_URL:-/app}
+    container_name: doc_hub_landing
+    ports:
+      - "127.0.0.1:8081:80"
     restart: unless-stopped
-    networks: [web]
+    networks: [app]
 
   dashboard:
     build:
       context: ./frontend
       dockerfile: dashboard/Dockerfile
+      args:
+        VITE_BASE_PATH: /app/
+    container_name: doc_hub_dashboard
+    ports:
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
     restart: unless-stopped
-    networks: [web]
+    networks: [app]
 
   widget_cdn:
     build:
       context: ./frontend
       dockerfile: widget/Dockerfile
+    container_name: doc_hub_widget_cdn
+    ports:
+      - "127.0.0.1:3002:80"
     restart: unless-stopped
-    networks: [web]
+    networks: [app]
 
 volumes:
   postgres_data:
   minio_data:
-  caddy_data:
 
 networks:
   internal:
     internal: true
-  web:
+  app:
+    driver: bridge

@@ -4,6 +4,8 @@ COPY tsconfig.base.json ./
 COPY shared ./shared
 COPY dashboard/package.json dashboard/package-lock.json* ./dashboard/
 WORKDIR /app/dashboard
+ARG VITE_BASE_PATH=/
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 RUN npm install
 COPY dashboard/ .
 RUN npm run build
