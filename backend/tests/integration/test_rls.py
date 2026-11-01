@@ -178,3 +178,28 @@ async def test_cross_tenant_read_returns_nothing(tenant_id, second_tenant_id):
         if doc:
             await db.delete(doc)
             await db.commit()
+
+
+def test_rls_isolates_groups_and_collections(tenant_id, second_tenant_id):
+    from sqlalchemy.exc import DBAPIError
+
+    from app.models.access import Collection, Group
+
+    with SyncSession() as db:
+        set_tenant_rls_sync(db, tenant_id)
+        db.add(Group(id=uuid.uuid4(), tenant_id=uuid.UUID(tenant_id), name="HR"))
+        db.add(Collection(id=uuid.uuid4(), tenant_id=uuid.UUID(tenant_id), name="Payroll", visibility="restricted"))
+
+    with SyncSession() as db:
+        set_tenant_rls_sync(db, second_tenant_id)
+        assert db.execute(select(Group)).scalars().all() == []
+        assert db.execute(select(Collection)).scalars().all() == []
+        # Writing a row for another tenant is refused by the policy.
+        db.add(Group(id=uuid.uuid4(), tenant_id=uuid.UUID(tenant_id), name="Injected"))
+        with pytest.raises(DBAPIError, match="row-level security"):
+            db.flush()
+        db.rollback()
+
+    with SyncSession() as db:
+        set_tenant_rls_sync(db, tenant_id)
+        assert [g.name for g in db.execute(select(Group)).scalars().all()] == ["HR"]

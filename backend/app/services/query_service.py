@@ -58,13 +58,9 @@ def _normalize_question(question: str) -> str:
     return " ".join(question.lower().split())
 
 
-async def build_cache_key(tenant_id: str, question: str, history: list[dict] | None) -> str:
-    """An answer is reusable only for the same question, the same conversation
-    context and the same version of the tenant's documents.
-
-    Phase 2 note: once documents have per-user permissions, the caller's
-    permission scope must be part of this key too.
-    """
+async def build_cache_key(tenant_id: str, question: str, history: list[dict] | None, scope=None) -> str:
+    """An answer is reusable only for the same question, conversation context,
+    version of the tenant's documents and set of documents the caller may see."""
     try:
         corpus_version = await get_corpus_version(tenant_id)
     except Exception as exc:  # cache is an optimisation; never fail a query on it
@@ -74,7 +70,8 @@ async def build_cache_key(tenant_id: str, question: str, history: list[dict] | N
     history_digest = hashlib.sha256(
         json.dumps([[m.get("role"), m.get("content")] for m in recent]).encode()
     ).hexdigest()
-    raw = f"{tenant_id}|v{corpus_version}|{history_digest}|{_normalize_question(question)}"
+    scope_digest = scope.digest() if scope is not None else "all"
+    raw = f"{tenant_id}|v{corpus_version}|s{scope_digest}|{history_digest}|{_normalize_question(question)}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -176,6 +173,7 @@ async def run_rag_query(
     db: AsyncSession,
     conversation_history: list[dict] | None = None,
     search_query: str | None = None,
+    scope=None,
 ) -> dict:
     """Retrieve context and build the prompt.
 
@@ -183,13 +181,13 @@ async def run_rag_query(
     `search_query`, or a condensed version of the question when it is a follow-up.
     """
     start = time.time()
-    cache_key = await build_cache_key(tenant_id, question, conversation_history)
+    cache_key = await build_cache_key(tenant_id, question, conversation_history, scope)
     cached = await _cache_get(cache_key)
     if cached:
         return {**json.loads(cached), "from_cache": True}
 
     query = search_query or await build_search_query(question, conversation_history)
-    result = await retrieve(db, tenant_id, query, top_k=CONTEXT_CHUNK_COUNT)
+    result = await retrieve(db, tenant_id, query, top_k=CONTEXT_CHUNK_COUNT, scope=scope)
     if not result.chunks:
         return {"answer": NO_DOCUMENTS_ANSWER, "sources": [], "confidence": 0.0, "from_cache": False}
 
@@ -318,9 +316,10 @@ async def stream_rag_query(
     tenant_id: str,
     db: AsyncSession,
     conversation_history: list[dict] | None = None,
+    scope=None,
 ) -> AsyncIterator[str]:
     stream_start = time.time()
-    context = await run_rag_query(question, tenant_id, db, conversation_history)
+    context = await run_rag_query(question, tenant_id, db, conversation_history, scope=scope)
 
     if "answer" in context:
         latency_ms = int((time.time() - stream_start) * 1000)

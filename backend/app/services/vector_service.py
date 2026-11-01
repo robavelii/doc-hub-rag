@@ -27,7 +27,9 @@ def _row_to_candidate(row, tenant_id: str, score: float) -> dict[str, Any]:
     }
 
 
-def replace_doc_chunks_sync(session, tenant_id: str, document_id: str, chunks: list[dict[str, Any]]) -> None:
+def replace_doc_chunks_sync(
+    session, tenant_id: str, document_id: str, chunks: list[dict[str, Any]], collection_id=None
+) -> None:
     """Swap a document's chunks in the caller's transaction (no commit).
 
     Old chunks stay queryable until the caller commits, so re-indexing never
@@ -48,6 +50,7 @@ def replace_doc_chunks_sync(session, tenant_id: str, document_id: str, chunks: l
                 filename=item.get("filename", ""),
                 embedding=item["embedding"],
                 metadata_=item.get("metadata") or {},
+                collection_id=collection_id,
             )
         )
 
@@ -84,7 +87,7 @@ def _hybrid_row(row, score: float) -> dict[str, Any]:
 
 
 async def vector_search(
-    session: AsyncSession, tenant_id: str, embedding: list[float], top_k: int = 40
+    session: AsyncSession, tenant_id: str, embedding: list[float], top_k: int = 40, scope=None
 ) -> list[dict[str, Any]]:
     """Nearest chunks by cosine similarity, restricted to one tenant.
 
@@ -93,7 +96,8 @@ async def vector_search(
     large table can get few or no results. With pgvector >= 0.8 we enable
     iterative scans; otherwise we search the tenant's rows exactly.
     """
-    params = {"embedding": _format_vector(embedding), "tenant_id": tenant_id, "top_k": top_k}
+    scope_sql, scope_params = scope.sql_filter() if scope is not None else ("TRUE", {})
+    params = {"embedding": _format_vector(embedding), "tenant_id": tenant_id, "top_k": top_k, **scope_params}
     if await _supports_iterative_scan(session):
         await session.execute(text("SET LOCAL hnsw.iterative_scan = relaxed_order"))
         await session.execute(text("SET LOCAL hnsw.ef_search = 100"))
@@ -101,7 +105,7 @@ async def vector_search(
             SELECT * FROM (
                 SELECT {_CHUNK_COLUMNS}, embedding <=> CAST(:embedding AS vector) AS distance
                 FROM chunks
-                WHERE tenant_id = CAST(:tenant_id AS uuid)
+                WHERE tenant_id = CAST(:tenant_id AS uuid) AND {scope_sql}
                 ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
             ) hits ORDER BY distance
@@ -109,7 +113,8 @@ async def vector_search(
     else:
         sql = f"""
             WITH tenant_chunks AS MATERIALIZED (
-                SELECT {_CHUNK_COLUMNS}, embedding FROM chunks WHERE tenant_id = CAST(:tenant_id AS uuid)
+                SELECT {_CHUNK_COLUMNS}, embedding FROM chunks
+                WHERE tenant_id = CAST(:tenant_id AS uuid) AND {scope_sql}
             )
             SELECT {_CHUNK_COLUMNS}, embedding <=> CAST(:embedding AS vector) AS distance
             FROM tenant_chunks
@@ -136,16 +141,20 @@ def build_or_tsquery(query: str) -> str:
     return " | ".join(tokens[:32])
 
 
-async def fulltext_search(session: AsyncSession, tenant_id: str, query: str, top_k: int = 40) -> list[dict[str, Any]]:
+async def fulltext_search(
+    session: AsyncSession, tenant_id: str, query: str, top_k: int = 40, scope=None
+) -> list[dict[str, Any]]:
     tsquery = build_or_tsquery(query)
     if not tsquery:
         return []
+    scope_sql, scope_params = scope.sql_filter() if scope is not None else ("TRUE", {})
     sql = f"""
         SELECT {_CHUNK_COLUMNS}, ts_rank_cd(search_vector, q, 32) AS rank
         FROM chunks, to_tsquery('english', :tsquery) q
-        WHERE tenant_id = CAST(:tenant_id AS uuid) AND search_vector @@ q
+        WHERE tenant_id = CAST(:tenant_id AS uuid) AND search_vector @@ q AND {scope_sql}
         ORDER BY rank DESC
         LIMIT :top_k
     """  # noqa: S608 - column list is a constant
-    rows = (await session.execute(text(sql), {"tsquery": tsquery, "tenant_id": tenant_id, "top_k": top_k})).fetchall()
+    params = {"tsquery": tsquery, "tenant_id": tenant_id, "top_k": top_k, **scope_params}
+    rows = (await session.execute(text(sql), params)).fetchall()
     return [_hybrid_row(row, float(row.rank)) for row in rows]

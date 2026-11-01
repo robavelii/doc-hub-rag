@@ -73,7 +73,7 @@ def _index_sections(
     chunks = chunk_sections(sections)
     vectors = _embed_chunks(chunks, filename)
 
-    replace_doc_chunks_sync(db, tenant_id, str(doc.id), vectors)
+    replace_doc_chunks_sync(db, tenant_id, str(doc.id), vectors, collection_id=doc.collection_id)
     doc.chunk_count = len(chunks)
     doc.status = "ready"
     doc.error_message = None

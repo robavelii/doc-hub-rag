@@ -80,15 +80,17 @@ async def retrieve(
     query: str,
     *,
     top_k: int = CONTEXT_CHUNK_COUNT,
+    scope=None,
 ) -> RetrievalResult:
+    """`scope` (services.access.AccessScope) limits results to what the caller may see."""
     vector_hits: list[dict] = []
     try:
         embedding = await get_ai_provider().embed_query(query)
-        vector_hits = await vector_search(db, tenant_id, embedding, top_k=CANDIDATES_PER_RETRIEVER)
+        vector_hits = await vector_search(db, tenant_id, embedding, top_k=CANDIDATES_PER_RETRIEVER, scope=scope)
     except Exception as exc:
         # Full-text search still answers many questions; better than failing the request.
         logger.warning("vector search unavailable, using full-text search only: %s", exc)
-    text_hits = await fulltext_search(db, tenant_id, query, top_k=CANDIDATES_PER_RETRIEVER)
+    text_hits = await fulltext_search(db, tenant_id, query, top_k=CANDIDATES_PER_RETRIEVER, scope=scope)
 
     fused = reciprocal_rank_fusion(vector_hits, text_hits)
     if not fused:
