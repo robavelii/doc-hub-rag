@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -8,13 +10,24 @@ from app.dependencies import get_current_tenant, require_owner
 from app.models.api_key import ApiKey
 from app.models.tenant import Tenant
 from app.services.audit_service import log_audit
-from app.services.auth_service import api_key_prefix, generate_api_key, hash_api_key
+from app.services.auth_service import (
+    API_KEY_KIND_SECRET,
+    api_key_prefix,
+    generate_api_key,
+    hash_api_key,
+)
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 
 
 class CreateApiKeyRequest(BaseModel):
     name: str = "Default"
+    # "publishable" keys can only ask questions and are meant for the embeddable widget.
+    kind: Literal["secret", "publishable"] = API_KEY_KIND_SECRET
+
+
+def _masked(key: ApiKey) -> str:
+    return f"{key.key_prefix}…"
 
 
 @router.get("")
@@ -32,7 +45,8 @@ async def list_api_keys(
                 "id": "legacy",
                 "name": "Default (legacy)",
                 "key_prefix": tenant.api_key_prefix,
-                "masked_key": f"sk-...{tenant.api_key_prefix}",
+                "masked_key": f"{tenant.api_key_prefix}…",
+                "kind": API_KEY_KIND_SECRET,
                 "last_used_at": None,
                 "created_at": None,
             }
@@ -42,7 +56,8 @@ async def list_api_keys(
             "id": str(k.id),
             "name": k.name,
             "key_prefix": k.key_prefix,
-            "masked_key": f"sk-...{k.key_prefix}",
+            "masked_key": _masked(k),
+            "kind": k.kind,
             "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
             "created_at": k.created_at.isoformat() if k.created_at else None,
         }
@@ -57,12 +72,13 @@ async def create_api_key(
     tenant: Tenant = Depends(require_owner),
     db: AsyncSession = Depends(get_db),
 ):
-    raw_key = generate_api_key()
+    raw_key = generate_api_key(body.kind)
     key = ApiKey(
         tenant_id=tenant.id,
         name=body.name,
         key_prefix=api_key_prefix(raw_key),
         key_hash=hash_api_key(raw_key),
+        kind=body.kind,
     )
     db.add(key)
     await db.commit()
@@ -72,13 +88,14 @@ async def create_api_key(
         "api_key_created",
         tenant_id=str(tenant.id),
         user_id=str(user.id) if user else None,
-        details={"name": body.name},
+        details={"name": body.name, "kind": body.kind},
     )
     return {
         "id": str(key.id),
         "name": key.name,
         "api_key": raw_key,
-        "masked_key": f"sk-...{key.key_prefix}",
+        "kind": key.kind,
+        "masked_key": _masked(key),
     }
 
 

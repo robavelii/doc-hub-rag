@@ -133,10 +133,10 @@ function ApiKeysTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) 
   useEffect(() => { load() }, [])
 
   const create = async () => {
-    const { data } = await api.post<{ api_key: string }>('/api-keys', { name: 'Integration' })
+    const { data } = await api.post<{ api_key: string }>('/api-keys', { name: 'Integration', kind: 'secret' })
     setNewKey(data.api_key)
     load()
-    toast('success', 'API key created', 'Copy it now — shown once')
+    toast('success', 'Secret key created', 'Copy it now. It is shown once and must stay on your servers')
   }
 
   const revoke = async (id: string) => {
@@ -154,7 +154,7 @@ function ApiKeysTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) 
       {newKey && <div className="mb-4 p-3 rounded-lg bg-primary-muted font-mono text-sm break-all">{newKey}</div>}
       {keys.map((k) => (
         <div key={k.id} className="flex items-center justify-between py-2 border-b border-border-subtle">
-          <div><p className="text-sm">{k.name}</p><p className="text-xs text-muted font-mono">{k.masked_key}</p></div>
+          <div><p className="text-sm">{k.name} <span className="text-xs text-muted">· {k.kind === 'publishable' ? 'widget (query only)' : 'secret'}</span></p><p className="text-xs text-muted font-mono">{k.masked_key}</p></div>
           {k.id !== 'legacy' && <Button variant="danger" size="sm" onClick={() => void revoke(k.id)}>Revoke</Button>}
         </div>
       ))}

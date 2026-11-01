@@ -6,11 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_tenant
+from app.dependencies import get_current_tenant, require_document_writer
 from app.middleware.rate_limiter import rate_limit
 from app.models.chunk import Chunk
 from app.models.document import Document
 from app.models.tenant import Tenant
+from app.services.cache_service import bump_corpus_version
 from app.services.storage_service import build_s3_key, delete_from_s3, upload_to_s3
 from app.services.usage_service import check_storage_limit, record_storage_usage
 from app.services.vector_service import delete_doc_vectors
@@ -106,7 +107,7 @@ async def get_document(
 @router.post("")
 async def upload_document(
     file: UploadFile = File(...),
-    tenant: Tenant = Depends(get_current_tenant),
+    tenant: Tenant = Depends(require_document_writer),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(rate_limit("documents")),
 ):
@@ -146,7 +147,7 @@ async def upload_document(
 @router.post("/url")
 async def ingest_url(
     body: UrlIngestRequest,
-    tenant: Tenant = Depends(get_current_tenant),
+    tenant: Tenant = Depends(require_document_writer),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(rate_limit("documents")),
 ):
@@ -174,17 +175,16 @@ async def ingest_url(
 @router.post("/{doc_id}/reingest")
 async def reingest_document(
     doc_id: str,
-    tenant: Tenant = Depends(get_current_tenant),
+    tenant: Tenant = Depends(require_document_writer),
     db: AsyncSession = Depends(get_db),
 ):
     doc = await db.get(Document, doc_id)
     if not doc or str(doc.tenant_id) != str(tenant.id):
         raise HTTPException(status_code=404, detail="Document not found")
 
-    await delete_doc_vectors(db, str(doc.id), str(tenant.id))
+    # Old chunks keep answering questions until the new ones replace them atomically.
     doc.status = "pending"
     doc.error_message = None
-    doc.chunk_count = 0
     await db.commit()
 
     ingest_document.delay(str(doc_id), str(tenant.id))
@@ -194,7 +194,7 @@ async def reingest_document(
 @router.delete("/{doc_id}")
 async def delete_document(
     doc_id: str,
-    tenant: Tenant = Depends(get_current_tenant),
+    tenant: Tenant = Depends(require_document_writer),
     db: AsyncSession = Depends(get_db),
 ):
     doc = await db.get(Document, doc_id)
@@ -207,4 +207,5 @@ async def delete_document(
     await db.delete(doc)
     await db.commit()
     await record_storage_usage(str(tenant.id), -size, doc_id, db)
+    await bump_corpus_version(str(tenant.id))
     return {"deleted": True}

@@ -185,7 +185,7 @@ jobs:
           fi
       - name: Backend image boots and imports the app
         if: matrix.target == 'backend'
-        run: docker run --rm doc-hub-backend python -c "import app.main; print('ok')"
+        run: docker run --rm doc-hub-backend python -c "import app.main, uvicorn_worker; print('ok')"
 
   # Single required status check for branch protection.
   ci-ok:

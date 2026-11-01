@@ -35,3 +35,6 @@ minio_data/
 
 # Celery beat local state
 celerybeat-schedule*
+
+# Redis snapshots
+dump.rdb

@@ -3,6 +3,7 @@
 fastapi
 uvicorn[standard]
 gunicorn
+uvicorn-worker
 pydantic[email]
 pydantic-settings
 sqlalchemy[asyncio]

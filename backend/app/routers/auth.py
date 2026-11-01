@@ -20,6 +20,7 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.audit_service import log_audit
 from app.services.auth_service import (
+    API_KEY_KIND_PUBLISHABLE,
     api_key_prefix,
     create_access_token,
     generate_api_key,
@@ -179,6 +180,18 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     )
     db.add(api_key_row)
 
+    # Publishable key for the embeddable widget: query-only, safe to put in a web page.
+    raw_widget_key = generate_api_key(API_KEY_KIND_PUBLISHABLE)
+    db.add(
+        ApiKey(
+            tenant_id=tenant.id,
+            name="Widget",
+            key_prefix=api_key_prefix(raw_widget_key),
+            key_hash=hash_api_key(raw_widget_key),
+            kind=API_KEY_KIND_PUBLISHABLE,
+        )
+    )
+
     try:
         await ensure_stripe_customer(tenant, body.email, db)
     except Exception as exc:  # billing is optional at signup; never block registration
@@ -186,7 +199,8 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
 
     verify_token = await _send_verification_email(db, user)
     response = await _issue_auth_response(db, user, tenant)
-    response["api_key"] = raw_api_key
+    response["api_key"] = raw_api_key  # secret: server-side use only, shown once
+    response["widget_key"] = raw_widget_key
     response["verification_token"] = verify_token
     await log_audit(db, "user_registered", tenant_id=str(tenant.id), user_id=str(user.id), ip_address=_client_ip(request))
     return response

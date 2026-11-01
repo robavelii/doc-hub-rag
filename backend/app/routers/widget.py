@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_tenant, require_owner
+from app.dependencies import get_query_tenant, require_owner
 from app.models.tenant import Tenant
 
 router = APIRouter(prefix="/widget", tags=["widget"])
@@ -22,7 +22,7 @@ class WidgetConfigUpdate(BaseModel):
 
 
 @router.get("/config")
-async def widget_config(tenant: Tenant = Depends(get_current_tenant)):
+async def widget_config(tenant: Tenant = Depends(get_query_tenant)):
     config = tenant.widget_config or {}
     return {
         "tenant_id": str(tenant.id),

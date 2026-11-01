@@ -1,5 +1,10 @@
-"""Seed demo tenants and superadmin user."""
+"""Seed the superadmin user and, outside production, demo tenants.
+
+Demo tenants use a password published in the README, so they are never created
+when APP_ENV=production unless SEED_DEMO_TENANTS=true is set explicitly.
+"""
 import asyncio
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -34,6 +39,13 @@ DEMO_DOCS = {
         ("globex-limits.txt", "Globex rate limits: Free tier 10 req/min, Pro tier 300 req/min."),
     ],
 }
+
+
+def demo_tenants_enabled() -> bool:
+    explicit = os.environ.get("SEED_DEMO_TENANTS", "").strip().lower()
+    if explicit:
+        return explicit in ("1", "true", "yes")
+    return settings.APP_ENV != "production"
 
 
 def ingest_sync(doc_id: str, tenant_id: str, content: str, filename: str) -> None:
@@ -101,6 +113,9 @@ async def seed():
             ("Acme Corp", "acme", "demo@acme.com", "demo12345678"),
             ("Globex Inc", "globex", "demo@globex.com", "demo12345678"),
         ]
+        if not demo_tenants_enabled():
+            print("APP_ENV=production: skipping demo tenants (set SEED_DEMO_TENANTS=true to override)")
+            demos = []
 
         for name, slug_base, email, password in demos:
             existing = await db.execute(select(User).where(User.email == email))
@@ -152,7 +167,8 @@ async def seed():
         await db.commit()
 
     # Re-ingest any docs left pending from a prior seed run without Celery
-    await reingest_pending_demo_docs()
+    if demo_tenants_enabled():
+        await reingest_pending_demo_docs()
 
     print("Seed complete.")
 

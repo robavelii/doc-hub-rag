@@ -14,6 +14,8 @@ class ApiKey(Base):
     name = Column(String, nullable=False, default="Default")
     key_prefix = Column(String(8), nullable=False, index=True)
     key_hash = Column(String, nullable=False, unique=True)
+    # "secret" = full tenant API for server-side use; "publishable" = query-only, safe in a web page.
+    kind = Column(String, nullable=False, default="secret", server_default="secret")
     last_used_at = Column(DateTime(timezone=True))
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

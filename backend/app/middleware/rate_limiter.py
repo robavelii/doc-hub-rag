@@ -1,11 +1,12 @@
 import time
+import uuid
 from collections.abc import Callable
 
 import redis.asyncio as aioredis
 from fastapi import Depends, HTTPException, Request
 
 from app.config import settings
-from app.dependencies import get_current_tenant
+from app.dependencies import KIND_PUBLISHABLE_KEY, Principal, resolve_principal
 from app.models.tenant import Tenant
 from app.services.usage_service import PLAN_LIMITS
 
@@ -18,6 +19,11 @@ BUCKET_DEFAULTS = {
     "documents": 30,
     "auth": 20,
 }
+
+# Per-visitor cap for public widget traffic, so one visitor cannot burn the
+# whole tenant's quota. Requires the real client IP: run uvicorn/gunicorn with
+# FORWARDED_ALLOW_IPS set to the reverse proxy's address.
+WIDGET_PER_IP_LIMIT = 20
 
 
 async def get_redis() -> aioredis.Redis:
@@ -37,7 +43,7 @@ def _bucket_limit(bucket: str, tenant: Tenant | None = None) -> int:
 async def _sliding_window_count(key: str, limit: int, window: int = WINDOW_SECONDS) -> int:
     r = await get_redis()
     now = time.time()
-    member = f"{now}:{id(key)}"
+    member = f"{now}:{uuid.uuid4().hex}"
     pipe = r.pipeline()
     pipe.zremrangebyscore(key, 0, now - window)
     pipe.zadd(key, {member: now})
@@ -80,10 +86,14 @@ async def enforce_email_rate_limit(bucket: str, email: str, limit: int = 10) -> 
 def rate_limit(bucket: str) -> Callable:
     async def _dependency(
         request: Request,
-        tenant: Tenant = Depends(get_current_tenant),
+        principal: Principal = Depends(resolve_principal),
     ) -> None:
+        tenant = principal.tenant
         limit = _bucket_limit(bucket, tenant)
         key = f"ratelimit:tenant:{tenant.id}:{bucket}"
         await _enforce_rate_limit(key, limit)
+        if principal.kind == KIND_PUBLISHABLE_KEY:
+            client_ip = request.client.host if request.client else "unknown"
+            await _enforce_rate_limit(f"ratelimit:widget:{tenant.id}:{client_ip}", WIDGET_PER_IP_LIMIT)
 
     return _dependency
