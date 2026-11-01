@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from app.models.chunk import Chunk
 from app.models.document import Document
 from app.models.tenant import Tenant
 from app.services.access import resolve_scope
+from app.services.audit_service import log_audit
 from app.services.cache_service import bump_corpus_version
 from app.services.storage_service import build_s3_key, delete_from_s3, upload_to_s3
 from app.services.usage_service import check_storage_limit, record_storage_usage
@@ -34,6 +35,14 @@ class UrlIngestRequest(BaseModel):
 class DocumentUpdate(BaseModel):
     # null moves the document to General
     collection_id: str | None
+
+
+async def _audit(db: AsyncSession, request: Request, tenant: Tenant, action: str, **details) -> None:
+    user = getattr(request.state, "user", None)
+    await log_audit(
+        db, action, tenant_id=str(tenant.id), user_id=str(user.id) if user else None,
+        details={k: str(v) if v is not None else None for k, v in details.items()},
+    )
 
 
 def _is_uuid(value: str) -> bool:
@@ -143,6 +152,7 @@ async def get_document(
 
 @router.post("")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     collection_id: str | None = Form(default=None),
     tenant: Tenant = Depends(require_document_writer),
@@ -182,6 +192,8 @@ async def upload_document(
     await db.commit()
     await record_storage_usage(str(tenant.id), len(content), str(doc_id), db)
 
+    await _audit(db, request, tenant, "document_uploaded", document_id=doc_id, filename=safe_filename,
+                 collection_id=target_collection)
     ingest_document.delay(str(doc_id), str(tenant.id))
 
     return {"id": str(doc_id), "status": "pending", "filename": safe_filename}
@@ -239,6 +251,7 @@ async def reingest_document(
 @router.delete("/{doc_id}")
 async def delete_document(
     doc_id: str,
+    request: Request,
     tenant: Tenant = Depends(require_document_writer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -253,6 +266,7 @@ async def delete_document(
     await db.commit()
     await record_storage_usage(str(tenant.id), -size, doc_id, db)
     await bump_corpus_version(str(tenant.id))
+    await _audit(db, request, tenant, "document_deleted", document_id=doc_id)
     return {"deleted": True}
 
 
@@ -260,6 +274,7 @@ async def delete_document(
 async def move_document(
     doc_id: str,
     body: DocumentUpdate,
+    request: Request,
     tenant: Tenant = Depends(require_document_writer),
     db: AsyncSession = Depends(get_db),
 ):
@@ -272,4 +287,5 @@ async def move_document(
     await db.execute(update(Chunk).where(Chunk.document_id == doc.id).values(collection_id=target))
     await db.commit()
     await bump_corpus_version(str(tenant.id))
+    await _audit(db, request, tenant, "document_moved", document_id=doc.id, collection_id=target)
     return _doc_summary(doc)

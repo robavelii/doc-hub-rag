@@ -329,6 +329,12 @@ Customers sign in with their own identity provider (Okta, Entra ID, Google Works
 
 Rules: a domain belongs to one workspace; public email domains cannot be claimed; the IdP can only sign in addresses on claimed domains and never an account in another workspace; owners keep password login when SSO is enforced; SCIM can deactivate members but never the owner. SCIM groups appear in Settings → Access and can be granted restricted collections. Webhooks are verified (HMAC-SHA256, 5-minute replay window).
 
+### Audit log and retention
+
+- `GET /audit-logs` (newest first, filter by `action`/`since`/`until`) and `GET /audit-logs/export?format=csv|jsonl` (owner/admin; the export is itself audited). Recorded: sign-ups, logins (password and SSO), API key changes, document upload/delete/move, collection and group changes, SSO/SCIM configuration, retention changes.
+- `PUT /settings/retention`: `content_retention_days` (questions, answers, conversations) and `audit_retention_days` (min 90). A nightly Celery beat job (`purge_expired_data`, 03:17 UTC) deletes older rows. Documents and billing records are never purged automatically.
+- Settings → **Compliance** in the dashboard.
+
 ### Roles and privacy
 
 - Conversations are private to the user who created them (owners cannot read members' chats).

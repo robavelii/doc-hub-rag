@@ -15,8 +15,13 @@ celery.conf.update(
     imports=(
         "app.workers.ingest_task",
         "app.workers.sync_task",
+        "app.workers.retention_task",
     ),
     beat_schedule={
+        "nightly-retention-purge": {
+            "task": "app.workers.retention_task.purge_expired_data",
+            "schedule": crontab(hour=3, minute=17),
+        },
         "nightly-notion-sync": {
             "task": "app.workers.sync_task.sync_all_notion",
             "schedule": crontab(hour=2, minute=0),
