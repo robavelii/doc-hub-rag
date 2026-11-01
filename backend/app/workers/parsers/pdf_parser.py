@@ -5,6 +5,8 @@ import pymupdf as fitz
 import pytesseract
 from PIL import Image
 
+from app.workers.parsers.sections import Section
+
 MIN_PAGE_TEXT_LEN = 30
 
 
@@ -25,40 +27,28 @@ def _extract_table_rows(plumber_page) -> list[str]:
     return rows
 
 
-def parse_pdf(content: bytes) -> str:
+def parse_pdf_sections(content: bytes) -> list[Section]:
+    """One section per page, carrying the page number for citations."""
     doc = fitz.open(stream=content, filetype="pdf")
-    page_blocks: list[str] = []
-
+    sections: list[Section] = []
     with pdfplumber.open(io.BytesIO(content)) as plumber_pdf:
         for i, page in enumerate(doc):
-            header = f"[page {i + 1}]"
-            parts: list[str] = [header]
-
             text = page.get_text("text").strip()
-            if text:
-                parts.append(text)
-
-            table_rows: list[str] = []
-            if i < len(plumber_pdf.pages):
-                table_rows = _extract_table_rows(plumber_pdf.pages[i])
-                if table_rows:
-                    table_text = "\n".join(table_rows)
-                    if table_text not in text:
-                        parts.append(table_text)
-
-            body = "\n".join(parts[1:])
-            if len(body.strip()) < MIN_PAGE_TEXT_LEN:
+            table_rows = _extract_table_rows(plumber_pdf.pages[i]) if i < len(plumber_pdf.pages) else []
+            table_text = "\n".join(table_rows)
+            parts = [text] if text else []
+            if table_text and table_text not in text:
+                parts.append(table_text)
+            if len("\n".join(parts).strip()) < MIN_PAGE_TEXT_LEN:
                 ocr = _ocr_page(page)
                 if ocr:
-                    parts = [header, ocr]
-                    if table_rows:
-                        table_text = "\n".join(table_rows)
-                        if table_text not in ocr:
-                            parts.append(table_text)
-
-            block = "\n".join(parts)
-            if block.strip() and block != header:
-                page_blocks.append(block)
-
+                    parts = [ocr] + ([table_text] if table_text and table_text not in ocr else [])
+            body = "\n".join(parts).strip()
+            if body:
+                sections.append(Section(text=body, page=i + 1))
     doc.close()
-    return "\n\n".join(page_blocks)
+    return sections
+
+
+def parse_pdf(content: bytes) -> str:
+    return "\n\n".join(f"[page {s.page}]\n{s.text}" for s in parse_pdf_sections(content))

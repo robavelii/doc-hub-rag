@@ -4,6 +4,8 @@ import zipfile
 
 from docx import Document
 
+from app.workers.parsers.sections import HEADING_SEPARATOR, Section, sections_to_text, text_sections
+
 
 def _parse_docx_xml_fallback(content: bytes) -> str:
     """Extract text from raw document.xml when python-docx cannot parse the file."""
@@ -19,21 +21,46 @@ def _parse_docx_xml_fallback(content: bytes) -> str:
     return "\n\n".join(lines)
 
 
-def parse_docx(content: bytes) -> str:
-    parts: list[str] = []
+def parse_docx_sections(content: bytes) -> list[Section]:
+    """Split on Word heading styles ("Heading 1".."Heading 6", "Title")."""
     try:
         doc = Document(io.BytesIO(content))
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                parts.append(paragraph.text.strip())
-        for table in doc.tables:
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if cells:
-                    parts.append(" | ".join(cells))
     except Exception:
-        return _parse_docx_xml_fallback(content)
+        return text_sections(_parse_docx_xml_fallback(content))
 
-    if not parts:
-        return _parse_docx_xml_fallback(content)
-    return "\n\n".join(parts)
+    sections: list[Section] = []
+    stack: list[tuple[int, str]] = []
+    buffer: list[str] = []
+
+    def flush() -> None:
+        body = "\n\n".join(buffer).strip()
+        if body:
+            heading = HEADING_SEPARATOR.join(name for _, name in stack) or None
+            sections.append(Section(text=body, heading=heading))
+        buffer.clear()
+
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+        style = (paragraph.style.name if paragraph.style is not None else "") or ""
+        level = 1 if style == "Title" else int(style.split()[-1]) if re.match(r"^Heading \d$", style) else None
+        if level is None:
+            buffer.append(text)
+            continue
+        flush()
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+        stack.append((level, text))
+
+    for table in doc.tables:
+        rows = [" | ".join(c.text.strip() for c in row.cells if c.text.strip()) for row in table.rows]
+        rows = [r for r in rows if r]
+        if rows:
+            buffer.append("\n".join(rows))
+    flush()
+    return sections or text_sections(_parse_docx_xml_fallback(content))
+
+
+def parse_docx(content: bytes) -> str:
+    return sections_to_text(parse_docx_sections(content))

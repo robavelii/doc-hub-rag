@@ -33,3 +33,5 @@ stripe
 prometheus-fastapi-instrumentator
 sentry-sdk
 fastembed
+python-pptx
+openpyxl

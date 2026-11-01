@@ -177,6 +177,8 @@ Questions go through: cache → follow-up condensing (rewrites "what about the s
 
 Models download on first use to `LOCAL_MODEL_CACHE_DIR` (or the fastembed default cache).
 
+**Supported uploads:** PDF (page numbers), Word (heading styles), PowerPoint (slide titles, speaker notes), Excel and CSV (rows keep their column names), Markdown, HTML (main content only), email (.eml), plain text, and URLs. Documents are split on their headings and every chunk is prefixed with its heading path, which is also returned with sources (`heading`, `page`). Re-ingest older documents (`scripts/reembed_documents.py`) to get this metadata.
+
 **Evals** (`backend/evals/`): 6 documents (4 with answers, 2 distractors), 114 questions (lexical, paraphrased, unanswerable), every answer tied to a verbatim evidence span. CI's `retrieval-eval` job fails a PR whose overall hit@k or MRR drops more than 0.02 below `evals/baselines/local.json`.
 
 ```bash

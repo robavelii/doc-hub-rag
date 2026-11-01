@@ -15,17 +15,12 @@ from app.services.cache_service import bump_corpus_version
 from app.services.storage_service import build_s3_key, delete_from_s3, upload_to_s3
 from app.services.usage_service import check_storage_limit, record_storage_usage
 from app.services.vector_service import delete_doc_vectors
-from app.utils.file_validation import detect_file_type, sanitize_filename
+from app.utils.file_validation import SUPPORTED_TYPES, detect_file_type, sanitize_filename
 from app.utils.url_safety import UnsafeUrlError, validate_url_for_fetch
 from app.workers.ingest_task import ingest_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-ALLOWED_TYPES = {
-    "application/pdf": "pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-    "text/plain": "txt",
-}
 MAX_FILE_SIZE = 50 * 1024 * 1024
 
 
@@ -115,9 +110,12 @@ async def upload_document(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
 
-    detected_type = detect_file_type(content, file.content_type)
-    if not detected_type or detected_type not in ALLOWED_TYPES.values():
-        raise HTTPException(status_code=400, detail="Unsupported or unrecognized file type")
+    detected_type = detect_file_type(content, file.content_type, file.filename)
+    if not detected_type or detected_type not in SUPPORTED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported or unrecognized file type. Supported: {', '.join(SUPPORTED_TYPES)}",
+        )
 
     await check_storage_limit(tenant, len(content), db)
 
