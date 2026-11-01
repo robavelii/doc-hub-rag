@@ -8,8 +8,12 @@ from app.providers.base import AIProvider
 logger = logging.getLogger(__name__)
 
 
+class EmbeddingUnavailableError(RuntimeError):
+    """The configured embedding provider could not produce vectors."""
+
+
 class FallbackProvider(AIProvider):
-    """Chat fallback chain with dimension-safe embedding fallback to mock only."""
+    """Chat fallback chain. Embeddings use exactly one provider (no fallback)."""
 
     provider_name = "fallback"
 
@@ -55,22 +59,20 @@ class FallbackProvider(AIProvider):
         return self._provider_label(self._embedding_provider)
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        # No fallback for embeddings: vectors from a different model live in a
+        # different space, so "falling back" silently writes unsearchable chunks.
+        # Callers decide: ingestion fails and retries, queries use keyword search.
         try:
             result = await asyncio.wait_for(
                 self._embedding_provider.embed_texts(texts),
                 timeout=self._timeout,
             )
-            self._record_embed(self._embedding_provider)
-            return result
         except Exception as exc:
-            logger.warning(
-                "Embedding provider %s failed (%s); falling back to mock",
-                self._provider_label(self._embedding_provider),
-                exc,
-            )
-            result = await self._mock_provider.embed_texts(texts)
-            self._record_embed(self._mock_provider)
-            return result
+            raise EmbeddingUnavailableError(
+                f"Embedding provider {self._provider_label(self._embedding_provider)} failed: {exc!r}"
+            ) from exc
+        self._record_embed(self._embedding_provider)
+        return result
 
     async def embed_single(self, text: str) -> list[float]:
         embeddings = await self.embed_texts([text])
@@ -97,10 +99,9 @@ class FallbackProvider(AIProvider):
         errors: list[str] = []
         for provider in self._chat_providers:
             name = self._provider_label(provider)
+            got_chunk = False
             try:
-                got_chunk = False
-                stream = provider.chat_completion_stream(messages, max_tokens=max_tokens)
-                async for chunk in stream:
+                async for chunk in provider.chat_completion_stream(messages, max_tokens=max_tokens):
                     if not got_chunk:
                         self._record_chat(provider)
                         got_chunk = True
@@ -109,6 +110,10 @@ class FallbackProvider(AIProvider):
                     return
                 errors.append(f"{name}: empty stream")
             except Exception as exc:
+                if got_chunk:
+                    # Part of the answer already reached the client; restarting with
+                    # another provider would append a second, different answer.
+                    raise
                 errors.append(f"{name}: {exc}")
                 logger.warning("Chat stream provider %s failed: %s", name, exc)
 

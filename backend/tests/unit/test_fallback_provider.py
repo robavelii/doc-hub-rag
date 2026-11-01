@@ -1,6 +1,6 @@
 import pytest
 
-from app.providers.fallback_provider import FallbackProvider
+from app.providers.fallback_provider import EmbeddingUnavailableError, FallbackProvider
 from app.providers.mock import MockProvider
 
 
@@ -69,7 +69,8 @@ async def test_chat_stream_fallback():
 
 
 @pytest.mark.asyncio
-async def test_embedding_falls_back_to_mock():
+async def test_embedding_failure_raises_instead_of_writing_mock_vectors():
+    """Mock vectors are not in the real model's space; storing them makes chunks unfindable."""
     mock = MockProvider()
     provider = FallbackProvider(
         chat_providers=[mock],
@@ -78,10 +79,33 @@ async def test_embedding_falls_back_to_mock():
         timeout_seconds=5,
     )
 
-    vector = await provider.embed_single("tenant document text")
+    with pytest.raises(EmbeddingUnavailableError):
+        await provider.embed_single("tenant document text")
+    assert provider.last_embed_provider is None
 
-    assert len(vector) > 0
-    assert provider.last_embed_provider == "mock"
+
+class MidStreamFailProvider(MockProvider):
+    provider_name = "mid-stream-fail"
+
+    async def chat_completion_stream(self, messages: list, max_tokens: int = 1000):
+        yield "partial "
+        raise RuntimeError("connection dropped")
+
+
+@pytest.mark.asyncio
+async def test_stream_failure_after_output_does_not_restart_on_next_provider():
+    mock = MockProvider()
+    provider = FallbackProvider(
+        chat_providers=[MidStreamFailProvider(), SuccessChatProvider()],
+        embedding_provider=mock,
+        mock_provider=mock,
+        timeout_seconds=5,
+    )
+    received = []
+    with pytest.raises(RuntimeError, match="connection dropped"):
+        async for chunk in provider.chat_completion_stream([{"role": "user", "content": "hi"}]):
+            received.append(chunk)
+    assert received == ["partial "]
 
 
 @pytest.mark.asyncio

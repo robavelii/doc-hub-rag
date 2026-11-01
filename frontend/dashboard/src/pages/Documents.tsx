@@ -3,6 +3,7 @@ import { File, Grid, List, RefreshCw, Trash2 } from 'lucide-react'
 import type { DocumentItem } from '@shared/types'
 import api from '../lib/api'
 import UploadZone from '../components/UploadZone'
+import { useAuthStore } from '../store/authStore'
 import DocStatusBadge from '../components/DocStatusBadge'
 import DocumentDetailModal from '../components/DocumentDetailModal'
 import { Button, Card, CardHeader, CardTitle, EmptyState, Input, Modal, Skeleton, useToast } from '../components/ui'
@@ -28,6 +29,8 @@ export default function Documents() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [reingesting, setReingesting] = useState<Set<string>>(new Set())
   const { toast } = useToast()
+  // Matches the API: only owners and admins may change the knowledge base.
+  const canEdit = useAuthStore((s) => s.user?.role !== 'member')
 
   const loadDocs = useCallback(async () => {
     const [{ data: docData }, { data: usageData }] = await Promise.all([
@@ -101,7 +104,7 @@ export default function Documents() {
           <UsageBar label="Storage" used={usage.storage_used_bytes} limit={usage.storage_limit_bytes} />
         </div>
       )}
-      <UploadZone onUploadComplete={() => void loadDocs()} />
+      {canEdit && <UploadZone onUploadComplete={() => void loadDocs()} />}
 
       <Card className="mt-8">
         <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
@@ -123,7 +126,7 @@ export default function Documents() {
             </select>
             <Button variant="ghost" size="sm" onClick={() => setView('list')}><List size={16} /></Button>
             <Button variant="ghost" size="sm" onClick={() => setView('grid')}><Grid size={16} /></Button>
-            {selected.size > 0 && (
+            {canEdit && selected.size > 0 && (
               <Button variant="danger" size="sm" onClick={() => setConfirmBulk(true)}>
                 Delete ({selected.size})
               </Button>
@@ -173,14 +176,14 @@ export default function Documents() {
                     <td className="py-3 pr-4"><DocStatusBadge status={d.status} /></td>
                     <td className="py-3 pr-4 text-muted">{d.chunk_count}</td>
                     <td className="py-3">
-                      <div className="flex gap-2">
+                      {canEdit && <div className="flex gap-2">
                         <Button variant="secondary" size="sm" onClick={() => void handleReingest(d.id)} disabled={reingesting.has(d.id)}>
                           <RefreshCw size={14} className={reingesting.has(d.id) ? 'animate-spin' : ''} />
                         </Button>
                         <Button variant="danger" size="sm" onClick={() => setConfirmSingleId(d.id)} aria-label={`Delete ${d.filename}`}>
                           <Trash2 size={14} />
                         </Button>
-                      </div>
+                      </div>}
                     </td>
                   </tr>
                 ))}

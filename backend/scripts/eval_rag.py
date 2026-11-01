@@ -20,12 +20,14 @@ from app.database import AsyncSessionLocal, set_tenant_rls
 from app.models.tenant import Tenant
 from app.services.query_service import complete_rag_query, run_rag_query
 
+# Smoke cases against the seeded Acme demo tenant (scripts/seed.py).
+# Phase 1 replaces this with a proper multi-corpus eval harness.
 EVAL_CASES: list[tuple[str, str]] = [
-    ("who holds this account", "Robel Fekadu"),
-    ("what is the persons name", "Robel Fekadu"),
-    ("whats the net balance", "0.00"),
-    ("what was the usd balance on june 05 2026", "0.00"),
-    ("net earnings for may 25 to may 31 2026", "125.00"),
+    ("what is the refund policy", "30 days"),
+    ("how long do I have to return a product", "30"),
+    ("is support available on weekends", "24/7"),
+    ("how much storage does the free plan include", "100MB"),
+    ("what does the pro plan include", "10GB"),
 ]
 
 

@@ -47,20 +47,28 @@ async def upsert_chunks(
     await session.commit()
 
 
-def upsert_chunks_sync(session, tenant_id: str, document_id: str, chunks: list[dict[str, Any]]) -> None:
+def replace_doc_chunks_sync(session, tenant_id: str, document_id: str, chunks: list[dict[str, Any]]) -> None:
+    """Swap a document's chunks in the caller's transaction (no commit).
+
+    Old chunks stay queryable until the caller commits, so re-indexing never
+    leaves a document with zero chunks and a failure leaves the old ones intact.
+    """
+    session.execute(
+        delete(Chunk).where(Chunk.document_id == uuid.UUID(document_id), Chunk.tenant_id == uuid.UUID(tenant_id))
+    )
     for item in chunks:
-        chunk = Chunk(
-            id=uuid.UUID(item["id"]) if isinstance(item["id"], str) else item["id"],
-            tenant_id=uuid.UUID(tenant_id),
-            document_id=uuid.UUID(document_id),
-            chunk_index=item["chunk_index"],
-            text=item["text"],
-            text_preview=item.get("text_preview", item["text"][:500]),
-            filename=item.get("filename", ""),
-            embedding=item["embedding"],
+        session.add(
+            Chunk(
+                id=uuid.UUID(item["id"]) if isinstance(item["id"], str) else item["id"],
+                tenant_id=uuid.UUID(tenant_id),
+                document_id=uuid.UUID(document_id),
+                chunk_index=item["chunk_index"],
+                text=item["text"],
+                text_preview=item.get("text_preview", item["text"][:500]),
+                filename=item.get("filename", ""),
+                embedding=item["embedding"],
+            )
         )
-        session.add(chunk)
-    session.commit()
 
 
 async def search_vectors(
@@ -148,10 +156,3 @@ async def delete_doc_vectors(session: AsyncSession, document_id: str, tenant_id:
         delete(Chunk).where(Chunk.document_id == uuid.UUID(document_id), Chunk.tenant_id == uuid.UUID(tenant_id))
     )
     await session.commit()
-
-
-def delete_doc_vectors_sync(session, document_id: str, tenant_id: str) -> None:
-    session.execute(
-        delete(Chunk).where(Chunk.document_id == uuid.UUID(document_id), Chunk.tenant_id == uuid.UUID(tenant_id))
-    )
-    session.commit()

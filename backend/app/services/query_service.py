@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import re
 import time
 import uuid
@@ -11,14 +12,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.providers import get_ai_provider
 from app.providers.fallback_provider import FallbackProvider
-from app.services.cache_service import get_cache, set_cache
+from app.services.cache_service import get_cache, get_corpus_version, set_cache
 from app.services.embedding_service import embed_single
 from app.services.vector_service import search_chunks_by_keywords, search_vectors
+
+logger = logging.getLogger(__name__)
 
 VECTOR_TOP_K = 40
 KEYWORD_TOP_K = 20
 CONTEXT_CHUNK_COUNT = 6
 MAX_CONTEXT_CHARS = 6000
+HISTORY_FOR_PROMPT = 10
+CACHE_TTL_SECONDS = 3600
+# Per-message overhead of the chat format (role, separators); OpenAI documents ~3-4 tokens.
+TOKENS_PER_MESSAGE = 4
 
 SYSTEM_PROMPT = """You are a document Q&A assistant. Answer using ONLY the Context below.
 
@@ -39,19 +46,9 @@ _QUERY_STOPWORDS = frozenset(
         "is", "are", "was", "were", "the", "a", "an", "do", "does", "did",
         "can", "could", "would", "should", "tell", "about", "me", "my",
         "and", "for", "non", "any", "all", "this", "that", "with", "from",
-        "persons", "person",
     }
 )
 
-_QUERY_SYNONYMS: dict[str, list[str]] = {
-    "balance": ["running balance", "usd balance", "account balance"],
-    "net": ["net earnings", "net balance"],
-    "name": ["account holder", "subject"],
-    "holder": ["account holder"],
-    "account": ["payoneer account"],
-    "earnings": ["net earnings"],
-    "salary": ["earnings", "net earnings"],
-}
 
 
 def _query_terms(question: str) -> list[str]:
@@ -71,12 +68,9 @@ def _query_terms(question: str) -> list[str]:
 
 
 def _expand_search_terms(terms: list[str]) -> list[str]:
-    expanded = list(terms)
-    for term in terms:
-        for alias in _QUERY_SYNONYMS.get(term, []):
-            if alias not in expanded:
-                expanded.append(alias)
-    return expanded[:12]
+    # Corpus-specific synonym lists overfit to one customer's documents; general
+    # query expansion belongs in the retrieval work (rewrite + full-text search).
+    return terms[:12]
 
 
 def _merge_candidates(vector_results: list, keyword_results: list) -> list:
@@ -193,23 +187,77 @@ def _stream_done_payload(
     }
 
 
+def _normalize_question(question: str) -> str:
+    return " ".join(question.lower().split())
+
+
+async def build_cache_key(tenant_id: str, question: str, history: list[dict] | None) -> str:
+    """An answer is reusable only for the same question, the same conversation
+    context and the same version of the tenant's documents.
+
+    Phase 2 note: once documents have per-user permissions, the caller's
+    permission scope must be part of this key too.
+    """
+    try:
+        corpus_version = await get_corpus_version(tenant_id)
+    except Exception as exc:  # cache is an optimisation; never fail a query on it
+        logger.warning("corpus version unavailable: %s", exc)
+        corpus_version = -1
+    recent = (history or [])[-HISTORY_FOR_PROMPT:]
+    history_digest = hashlib.sha256(
+        json.dumps([[m.get("role"), m.get("content")] for m in recent]).encode()
+    ).hexdigest()
+    raw = f"{tenant_id}|v{corpus_version}|{history_digest}|{_normalize_question(question)}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+async def _cache_get(key: str) -> str | None:
+    try:
+        return await get_cache(key)
+    except Exception as exc:
+        logger.warning("answer cache read failed: %s", exc)
+        return None
+
+
+async def _cache_set(key: str, value: dict) -> None:
+    try:
+        await set_cache(key, json.dumps(value), ttl=CACHE_TTL_SECONDS)
+    except Exception as exc:
+        logger.warning("answer cache write failed: %s", exc)
+
+
+def count_prompt_tokens(provider, messages: list[dict]) -> int:
+    return sum(provider.count_tokens(m.get("content") or "") + TOKENS_PER_MESSAGE for m in messages)
+
+
 async def run_rag_query(
     question: str,
     tenant_id: str,
     db: AsyncSession,
     conversation_history: list[dict] | None = None,
+    search_query: str | None = None,
 ) -> dict:
+    """Retrieve context and build the prompt.
+
+    `question` is what the user asked (goes in the prompt); `search_query` is an
+    optional rewrite used only for retrieval.
+    """
     start = time.time()
-    cache_key = hashlib.sha256(f"{tenant_id}:{question}".encode()).hexdigest()
-    cached = await get_cache(cache_key)
+    cache_key = await build_cache_key(tenant_id, question, conversation_history)
+    cached = await _cache_get(cache_key)
     if cached:
         return {**json.loads(cached), "from_cache": True}
 
-    query_terms = _query_terms(question)
-    search_terms = _expand_search_terms(query_terms)
+    retrieval_text = search_query or question
+    search_terms = _expand_search_terms(_query_terms(retrieval_text))
 
-    query_embedding = await embed_single(question)
-    vector_candidates = await search_vectors(db, tenant_id, query_embedding, top_k=VECTOR_TOP_K)
+    vector_candidates: list = []
+    try:
+        query_embedding = await embed_single(retrieval_text)
+        vector_candidates = await search_vectors(db, tenant_id, query_embedding, top_k=VECTOR_TOP_K)
+    except Exception as exc:
+        # Keyword retrieval still answers many questions; better than a 500.
+        logger.warning("vector search unavailable, using keyword search only: %s", exc)
     keyword_candidates = await search_chunks_by_keywords(db, tenant_id, search_terms, top_k=KEYWORD_TOP_K)
     candidates = _merge_candidates(vector_candidates, keyword_candidates)
 
@@ -221,7 +269,7 @@ async def run_rag_query(
             "from_cache": False,
         }
 
-    top_chunks, confidence = _rank_chunks(question, candidates)
+    top_chunks, confidence = _rank_chunks(retrieval_text, candidates)
 
     context_parts = []
     source_ids = []
@@ -242,7 +290,7 @@ async def run_rag_query(
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT.format(context=context)}]
     if conversation_history:
-        messages.extend(conversation_history[-10:])
+        messages.extend(conversation_history[-HISTORY_FOR_PROMPT:])
     messages.append({"role": "user", "content": question})
 
     return {
@@ -272,7 +320,7 @@ async def complete_rag_query(context: dict, tenant_id: str, db: AsyncSession) ->
     answer = await provider.chat_completion(context["messages"])
     metrics = _chat_provider_metrics(provider)
     latency_ms = int((time.time() - context["start_time"]) * 1000)
-    tokens_total = provider.count_tokens(context["question"]) + provider.count_tokens(answer)
+    tokens_total = count_prompt_tokens(provider, context["messages"]) + provider.count_tokens(answer)
 
     from app.models.query_log import QueryLog
     from app.services.usage_service import record_query_usage
@@ -306,19 +354,16 @@ async def complete_rag_query(context: dict, tenant_id: str, db: AsyncSession) ->
         "query_log_id": str(log_id),
         **metrics,
     }
-    await set_cache(
+    await _cache_set(
         context["cache_key"],
-        json.dumps(
-            {
-                "answer": answer,
-                "sources": context["sources"],
-                "confidence": context["confidence"],
-                "tokens_total": tokens_total,
-                "latency_ms": latency_ms,
-                **metrics,
-            }
-        ),
-        ttl=3600,
+        {
+            "answer": answer,
+            "sources": context["sources"],
+            "confidence": context["confidence"],
+            "tokens_total": tokens_total,
+            "latency_ms": latency_ms,
+            **metrics,
+        },
     )
     return result
 
@@ -345,9 +390,8 @@ async def stream_rag_query(
     conversation_id: str | None = None,
 ) -> AsyncIterator[str]:
     stream_start = time.time()
-    search_question = await _maybe_rewrite_query(question)
-    context = await run_rag_query(search_question, tenant_id, db, conversation_history)
-    context["question"] = question
+    search_query = await _maybe_rewrite_query(question)
+    context = await run_rag_query(question, tenant_id, db, conversation_history, search_query=search_query)
 
     if "answer" in context:
         latency_ms = int((time.time() - stream_start) * 1000)
@@ -363,7 +407,7 @@ async def stream_rag_query(
 
     metrics = _chat_provider_metrics(provider)
     latency_ms = int((time.time() - context["start_time"]) * 1000)
-    tokens_total = provider.count_tokens(context["question"]) + provider.count_tokens(full_response)
+    tokens_total = count_prompt_tokens(provider, context["messages"]) + provider.count_tokens(full_response)
 
     from app.models.query_log import QueryLog
     from app.services.usage_service import record_query_usage
@@ -393,6 +437,6 @@ async def stream_rag_query(
         "from_cache": False,
         **metrics,
     }
-    await set_cache(context["cache_key"], json.dumps(cache_data), ttl=3600)
+    await _cache_set(context["cache_key"], cache_data)
 
     yield f"data: {json.dumps(_stream_done_payload(context, tokens_total=tokens_total, latency_ms=latency_ms, query_log_id=str(log_id), **metrics))}\n\n"

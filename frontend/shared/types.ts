@@ -22,6 +22,7 @@ export interface AuthTokens {
   access_token: string
   refresh_token: string
   api_key?: string
+  widget_key?: string
   tenant?: TenantSummary
   user?: UserSummary
 }
@@ -192,6 +193,7 @@ export interface ApiKeyItem {
   name: string
   key_prefix: string
   masked_key: string
+  kind?: 'secret' | 'publishable'
   last_used_at?: string | null
   created_at?: string | null
 }

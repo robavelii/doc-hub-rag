@@ -86,7 +86,9 @@ flatbuffers==25.12.19
 greenlet==3.5.6
     # via sqlalchemy
 gunicorn==26.2.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   uvicorn-worker
 h11==0.16.0
     # via
     #   httpcore
@@ -342,6 +344,10 @@ uuid-utils==0.19.0
     #   langchain-core
     #   langsmith
 uvicorn==0.54.0
+    # via
+    #   -r requirements.in
+    #   uvicorn-worker
+uvicorn-worker==0.4.0
     # via -r requirements.in
 uvloop==0.23.0
     # via uvicorn

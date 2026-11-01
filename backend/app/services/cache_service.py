@@ -32,3 +32,33 @@ async def delete_cache(key: str) -> None:
 async def get_cache_json(key: str) -> dict | None:
     raw = await get_cache(key)
     return json.loads(raw) if raw else None
+
+
+# --- Corpus versioning -------------------------------------------------------
+# Every change to a tenant's documents bumps a counter that is part of the
+# answer-cache key, so cached answers never outlive the documents they cite.
+
+def _corpus_key(tenant_id: str) -> str:
+    return f"rag:corpus_version:{tenant_id}"
+
+
+async def get_corpus_version(tenant_id: str) -> int:
+    client = await get_redis()
+    value = await client.get(_corpus_key(tenant_id))
+    return int(value) if value else 0
+
+
+async def bump_corpus_version(tenant_id: str) -> None:
+    client = await get_redis()
+    await client.incr(_corpus_key(tenant_id))
+
+
+def bump_corpus_version_sync(tenant_id: str) -> None:
+    """For Celery workers (sync code)."""
+    import redis as sync_redis
+
+    client = sync_redis.from_url(settings.REDIS_URL)
+    try:
+        client.incr(_corpus_key(tenant_id))
+    finally:
+        client.close()

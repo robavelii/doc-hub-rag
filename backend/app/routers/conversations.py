@@ -7,9 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_tenant
+from app.dependencies import Principal, get_principal
 from app.models.conversation import Conversation, ConversationMessage
-from app.models.tenant import Tenant
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -22,6 +21,32 @@ class UpdateConversationRequest(BaseModel):
     title: str
 
 
+def owner_filter(principal: Principal):
+    """Conversations are private: users see their own, secret API keys see API-created ones."""
+    if principal.user_id is not None:
+        return Conversation.user_id == principal.user_id
+    return Conversation.user_id.is_(None)
+
+
+def _owns(convo: Conversation | None, principal: Principal) -> bool:
+    if not convo or str(convo.tenant_id) != str(principal.tenant.id):
+        return False
+    return convo.user_id == principal.user_id
+
+
+async def get_owned_conversation(
+    db: AsyncSession, principal: Principal, conversation_id: str | None
+) -> Conversation | None:
+    if not conversation_id:
+        return None
+    try:
+        convo_uuid = uuid.UUID(conversation_id)
+    except ValueError:
+        return None
+    convo = await db.get(Conversation, convo_uuid)
+    return convo if _owns(convo, principal) else None
+
+
 def _auto_title(first_message: str) -> str:
     title = first_message.strip()[:60]
     return title if title else "New conversation"
@@ -29,12 +54,12 @@ def _auto_title(first_message: str) -> str:
 
 @router.get("")
 async def list_conversations(
-    tenant: Tenant = Depends(get_current_tenant),
+    principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(Conversation)
-        .where(Conversation.tenant_id == tenant.id)
+        .where(Conversation.tenant_id == principal.tenant.id, owner_filter(principal))
         .order_by(Conversation.updated_at.desc())
         .limit(50)
     )
@@ -53,11 +78,12 @@ async def list_conversations(
 @router.post("")
 async def create_conversation(
     body: CreateConversationRequest,
-    tenant: Tenant = Depends(get_current_tenant),
+    principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ):
     convo = Conversation(
-        tenant_id=tenant.id,
+        tenant_id=principal.tenant.id,
+        user_id=principal.user_id,
         title=body.title or "New conversation",
     )
     db.add(convo)
@@ -73,11 +99,11 @@ async def create_conversation(
 @router.get("/{conversation_id}")
 async def get_conversation(
     conversation_id: str,
-    tenant: Tenant = Depends(get_current_tenant),
+    principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ):
-    convo = await db.get(Conversation, uuid.UUID(conversation_id))
-    if not convo or str(convo.tenant_id) != str(tenant.id):
+    convo = await get_owned_conversation(db, principal, conversation_id)
+    if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     result = await db.execute(
@@ -108,11 +134,11 @@ async def get_conversation(
 async def update_conversation(
     conversation_id: str,
     body: UpdateConversationRequest,
-    tenant: Tenant = Depends(get_current_tenant),
+    principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ):
-    convo = await db.get(Conversation, uuid.UUID(conversation_id))
-    if not convo or str(convo.tenant_id) != str(tenant.id):
+    convo = await get_owned_conversation(db, principal, conversation_id)
+    if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
     convo.title = body.title.strip()[:120] or "New conversation"
     convo.updated_at = datetime.now(UTC)
@@ -127,11 +153,11 @@ async def update_conversation(
 @router.delete("/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
-    tenant: Tenant = Depends(get_current_tenant),
+    principal: Principal = Depends(get_principal),
     db: AsyncSession = Depends(get_db),
 ):
-    convo = await db.get(Conversation, uuid.UUID(conversation_id))
-    if not convo or str(convo.tenant_id) != str(tenant.id):
+    convo = await get_owned_conversation(db, principal, conversation_id)
+    if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
     await db.delete(convo)
     await db.commit()
@@ -140,7 +166,7 @@ async def delete_conversation(
 
 async def persist_conversation_messages(
     db: AsyncSession,
-    tenant_id: str,
+    principal: Principal,
     conversation_id: str | None,
     question: str,
     answer: str,
@@ -150,12 +176,12 @@ async def persist_conversation_messages(
 ) -> str:
     from app.database import set_tenant_rls
 
+    tenant_id = str(principal.tenant.id)
     await set_tenant_rls(db, tenant_id)
     convo_id: uuid.UUID
     if conversation_id:
-        convo = await db.get(Conversation, uuid.UUID(conversation_id))
-        if not convo or str(convo.tenant_id) != tenant_id:
-            convo = None
+        # Someone else's conversation id is treated like an unknown one: start a new one.
+        convo = await get_owned_conversation(db, principal, conversation_id)
         if convo:
             convo_id = convo.id
             count_result = await db.execute(
@@ -167,12 +193,16 @@ async def persist_conversation_messages(
                 convo.title = _auto_title(question)
             convo.updated_at = datetime.now(UTC)
         else:
-            convo = Conversation(tenant_id=uuid.UUID(tenant_id), title=_auto_title(question))
+            convo = Conversation(
+                tenant_id=uuid.UUID(tenant_id), user_id=principal.user_id, title=_auto_title(question)
+            )
             db.add(convo)
             await db.flush()
             convo_id = convo.id
     else:
-        convo = Conversation(tenant_id=uuid.UUID(tenant_id), title=_auto_title(question))
+        convo = Conversation(
+            tenant_id=uuid.UUID(tenant_id), user_id=principal.user_id, title=_auto_title(question)
+        )
         db.add(convo)
         await db.flush()
         convo_id = convo.id

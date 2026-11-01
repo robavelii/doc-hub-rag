@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -41,12 +42,20 @@ def validate_password_strength(password: str) -> None:
         )
 
 
-def generate_api_key() -> str:
-    return secrets.token_hex(32)
+API_KEY_KIND_SECRET = "secret"  # noqa: S105 - a label, not a credential
+API_KEY_KIND_PUBLISHABLE = "publishable"
+_API_KEY_PREFIXES = {API_KEY_KIND_SECRET: "sk_", API_KEY_KIND_PUBLISHABLE: "pk_"}
+_SHA256_SCHEME = "sha256$"
+
+
+def generate_api_key(kind: str = API_KEY_KIND_SECRET) -> str:
+    """256-bit random key. `pk_` keys are safe to embed in web pages; `sk_` keys are not."""
+    return _API_KEY_PREFIXES[kind] + secrets.token_hex(32)
 
 
 def hash_api_key(raw_key: str) -> str:
-    return bcrypt.hashpw(raw_key.encode(), bcrypt.gensalt()).decode()
+    """API keys carry 256 bits of entropy, so a fast hash is safe and avoids bcrypt per request."""
+    return _SHA256_SCHEME + hashlib.sha256(raw_key.encode()).hexdigest()
 
 
 def api_key_prefix(raw_key: str) -> str:
@@ -54,7 +63,17 @@ def api_key_prefix(raw_key: str) -> str:
 
 
 def verify_api_key(raw_key: str, hashed: str) -> bool:
-    return bcrypt.checkpw(raw_key.encode(), hashed.encode())
+    if hashed.startswith(_SHA256_SCHEME):
+        return hmac.compare_digest(hash_api_key(raw_key), hashed)
+    # Legacy bcrypt hashes from before 2026-11; upgraded on next successful use.
+    try:
+        return bcrypt.checkpw(raw_key.encode(), hashed.encode())
+    except ValueError:
+        return False
+
+
+def api_key_needs_rehash(hashed: str) -> bool:
+    return not hashed.startswith(_SHA256_SCHEME)
 
 
 def hash_opaque_token(raw_token: str) -> str:

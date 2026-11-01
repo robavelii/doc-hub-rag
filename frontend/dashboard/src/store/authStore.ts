@@ -8,7 +8,9 @@ interface AuthState {
   refreshToken: string | null
   user: UserSummary | null
   tenant: TenantSummary | null
-  apiKey: string | null
+  /** Publishable widget key (pk_…). The secret API key is never stored in the browser. */
+  widgetKey: string | null
+  setWidgetKey: (key: string) => void
   login: (email: string, password: string, remember?: boolean) => Promise<void>
   register: (tenantName: string, email: string, password: string) => Promise<{ api_key?: string }>
   logout: () => void
@@ -37,7 +39,8 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       user: null,
       tenant: null,
-      apiKey: null,
+      widgetKey: null,
+      setWidgetKey: (key) => set({ widgetKey: key }),
 
       login: async (email, password, remember = false) => {
         const { data } = await api.post('/auth/login', { email, password })
@@ -73,7 +76,7 @@ export const useAuthStore = create<AuthState>()(
           accessToken: data.access_token as string,
           refreshToken: (data.refresh_token as string) ?? null,
           tenant: data.tenant as TenantSummary,
-          apiKey: (data.api_key as string) ?? null,
+          widgetKey: (data.widget_key as string) ?? null,
           user: (data.user as UserSummary) ?? { id: '', email, role: 'owner', is_superadmin: false },
         })
         return { api_key: data.api_key as string | undefined }
@@ -83,7 +86,7 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
         delete api.defaults.headers.common['Authorization']
-        set({ accessToken: null, refreshToken: null, user: null, tenant: null, apiKey: null })
+        set({ accessToken: null, refreshToken: null, user: null, tenant: null, widgetKey: null })
       },
     }),
     { name: 'auth-store' }

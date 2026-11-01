@@ -8,8 +8,10 @@ import { copyText } from '../lib/copy'
 import { useToast } from '../components/ui'
 
 export default function Widget() {
-  const storedApiKey = useAuthStore((s) => s.apiKey)
-  const [apiKey, setApiKey] = useState(storedApiKey ?? '')
+  const storedWidgetKey = useAuthStore((s) => s.widgetKey)
+  const setStoredWidgetKey = useAuthStore((s) => s.setWidgetKey)
+  const [apiKey, setApiKey] = useState(storedWidgetKey ?? '')
+  const [creatingKey, setCreatingKey] = useState(false)
   const { widgetConfig, fetchWidgetConfig, updateWidgetConfig } = useTenantStore()
   const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -31,14 +33,22 @@ export default function Widget() {
   }, [fetchWidgetConfig])
 
   useEffect(() => {
-    if (storedApiKey) {
-      setApiKey(storedApiKey)
-      return
+    if (storedWidgetKey) setApiKey(storedWidgetKey)
+  }, [storedWidgetKey])
+
+  const createWidgetKey = async () => {
+    setCreatingKey(true)
+    try {
+      const { data } = await api.post<{ api_key: string }>('/api-keys', { name: 'Widget', kind: 'publishable' })
+      setApiKey(data.api_key)
+      setStoredWidgetKey(data.api_key)
+      toast('success', 'Widget key created', 'It can only answer questions, so it is safe to embed')
+    } catch {
+      toast('error', 'Could not create a widget key', 'Only owners and admins can create keys')
+    } finally {
+      setCreatingKey(false)
     }
-    void api.get<Array<{ api_key?: string }>>('/api-keys').then(() => {
-      /* keys are masked — user copies from Settings or registration */
-    })
-  }, [storedApiKey])
+  }
 
   const widgetCdn = import.meta.env.VITE_WIDGET_CDN_URL || 'http://localhost:3002/widget.js'
   const apiBase = window.location.origin.includes('localhost') ? 'http://localhost:8000' : `${window.location.origin}/api`.replace('/api', '')
@@ -47,7 +57,7 @@ export default function Widget() {
 <script src="${widgetCdn}"></script>
 <script>
   RAGWidget.init({
-    apiKey: '${apiKey || 'YOUR_API_KEY'}',
+    apiKey: '${apiKey || 'YOUR_WIDGET_KEY'}',
     containerId: 'my-assistant',
     primaryColor: '${primaryColor}',
     apiBase: '${apiBase}'
@@ -105,8 +115,18 @@ export default function Widget() {
             ) : (
               <>
                 <div>
-                  <label className="text-xs text-muted mb-1 block">API key for embed</label>
-                  <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste API key from Settings" />
+                  <label className="text-xs text-muted mb-1 block">Widget key (publishable, safe to embed)</label>
+                  <div className="flex gap-2">
+                    <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="pk_…" />
+                    <Button variant="ghost" onClick={() => void createWidgetKey()} disabled={creatingKey}>
+                      New key
+                    </Button>
+                  </div>
+                  {apiKey && !apiKey.startsWith('pk_') && (
+                    <p className="text-xs text-danger mt-1">
+                      This is not a widget key. Secret keys give full access to your documents; never put one in a web page.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted mb-1 block">Primary color</label>
@@ -153,7 +173,7 @@ export default function Widget() {
             <div ref={previewRef} className="relative h-[calc(100%-2rem)]" />
             {!apiKey && (
               <p className="absolute inset-0 flex items-center justify-center text-xs text-muted p-4 text-center">
-                Add an API key to load the live widget preview
+                Create a widget key to load the live preview
               </p>
             )}
           </div>

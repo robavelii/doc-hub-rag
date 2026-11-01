@@ -274,6 +274,26 @@ pytest tests/e2e/test_local_model.py -m local -v
 - `GET /widget/config` — Widget settings (API key auth)
 - `GET /admin/tenants` — Superadmin tenant list
 
+### API keys
+
+| Kind | Prefix | Can do | Where it belongs |
+|------|--------|--------|------------------|
+| Secret | `sk_` | Full tenant API (documents, query, conversations, usage) | Your servers only |
+| Publishable | `pk_` | `POST /query`, `POST /query/stream`, `GET /widget/config` only; honours the widget domain allowlist and a per-visitor rate limit; never reads or writes stored conversations | The embeddable widget |
+
+Registration returns one of each (`api_key`, `widget_key`). Create more in **Settings → API keys** or **Widget**. Keys are stored as SHA-256 hashes; legacy bcrypt-hashed keys keep working and are re-hashed on first use.
+
+### Roles and privacy
+
+- Conversations are private to the user who created them (owners cannot read members' chats).
+- Only `owner` and `admin` users (or secret keys) can upload, re-ingest or delete documents; `member` users can read and ask.
+
+## Production notes
+
+- `scripts/seed.py` never creates the demo tenants when `APP_ENV=production` (override with `SEED_DEMO_TENANTS=true`).
+- Set `FORWARDED_ALLOW_IPS` to your reverse proxy's address so per-visitor widget rate limits see real client IPs (`docker-compose.prod.yml` sets it for the host nginx setup).
+- If an existing widget embed uses an old full-access key, replace it with a `pk_` key and revoke the old one.
+
 ## Tenant Isolation
 
 1. **pgvector:** All chunk queries filter by `tenant_id`
