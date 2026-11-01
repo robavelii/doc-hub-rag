@@ -10,7 +10,6 @@ Requires Postgres, Redis, MinIO running and migrations applied.
 """
 import asyncio
 import sys
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import AsyncIterator, List, Optional
+from collections.abc import AsyncIterator
 
 from app.config import settings
 from app.providers.base import AIProvider
@@ -15,7 +15,7 @@ class FallbackProvider(AIProvider):
 
     def __init__(
         self,
-        chat_providers: List[AIProvider],
+        chat_providers: list[AIProvider],
         embedding_provider: AIProvider,
         mock_provider: AIProvider,
         timeout_seconds: int | None = None,
@@ -24,10 +24,10 @@ class FallbackProvider(AIProvider):
         self._embedding_provider = embedding_provider
         self._mock_provider = mock_provider
         self._timeout = timeout_seconds or settings.PROVIDER_TIMEOUT_SECONDS
-        self.last_chat_provider: Optional[str] = None
-        self.last_chat_model: Optional[str] = None
-        self.last_embed_provider: Optional[str] = None
-        self.last_embed_model: Optional[str] = None
+        self.last_chat_provider: str | None = None
+        self.last_chat_model: str | None = None
+        self.last_embed_provider: str | None = None
+        self.last_embed_model: str | None = None
 
     def _provider_label(self, provider: AIProvider) -> str:
         return getattr(provider, "provider_name", provider.__class__.__name__)
@@ -47,14 +47,14 @@ class FallbackProvider(AIProvider):
         self.last_embed_model = self._embed_model(provider)
 
     @property
-    def chat_provider_names(self) -> List[str]:
+    def chat_provider_names(self) -> list[str]:
         return [self._provider_label(p) for p in self._chat_providers]
 
     @property
     def embedding_provider_name(self) -> str:
         return self._provider_label(self._embedding_provider)
 
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         try:
             result = await asyncio.wait_for(
                 self._embedding_provider.embed_texts(texts),
@@ -72,7 +72,7 @@ class FallbackProvider(AIProvider):
             self._record_embed(self._mock_provider)
             return result
 
-    async def embed_single(self, text: str) -> List[float]:
+    async def embed_single(self, text: str) -> list[float]:
         embeddings = await self.embed_texts([text])
         return embeddings[0]
 

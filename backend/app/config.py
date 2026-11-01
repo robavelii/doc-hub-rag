@@ -1,5 +1,4 @@
 from functools import lru_cache
-from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -59,11 +58,11 @@ class Settings(BaseSettings):
     ENABLE_QUERY_REWRITE: bool = False
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
-    def chat_provider_chain_list(self) -> List[str]:
+    def chat_provider_chain_list(self) -> list[str]:
         if self.CHAT_PROVIDER_CHAIN.strip():
             return [p.strip().lower() for p in self.CHAT_PROVIDER_CHAIN.split(",") if p.strip()]
         provider = self.AI_PROVIDER.lower()

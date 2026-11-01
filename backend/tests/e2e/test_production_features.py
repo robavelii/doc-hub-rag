@@ -76,7 +76,7 @@ class TestFeedback:
         token = reg["access_token"]
         tenant_id = reg["tenant"]["id"]
 
-        from tests.e2e.helpers import ingest_text_sync, SAMPLE_DOC
+        from tests.e2e.helpers import SAMPLE_DOC, ingest_text_sync
 
         ingest_text_sync(tenant_id, "fb.txt", SAMPLE_DOC)
         r = await client.post(

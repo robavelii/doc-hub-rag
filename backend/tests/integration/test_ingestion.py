@@ -1,9 +1,11 @@
+
 """Integration test for ingestion pipeline."""
 
+import os
 import uuid
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from app.database import AdminSyncSession, SyncSession, set_tenant_rls_sync
 from app.models.document import Document
@@ -23,13 +25,14 @@ SAMPLE = (
 def postgres_available():
     try:
         from sqlalchemy import create_engine, text
+
         from app.config import settings
 
         engine = create_engine(settings.DATABASE_SYNC_URL)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
-        pytest.skip("Integration tests require Postgres")
+        pytest.fail("Integration tests require Postgres") if os.environ.get("REQUIRE_SERVICES") == "1" else pytest.skip("Integration tests require Postgres")
 
 
 @pytest.fixture

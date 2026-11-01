@@ -1,11 +1,10 @@
 import asyncio
 import concurrent.futures
 import uuid
-from typing import Coroutine, TypeVar
+from collections.abc import Coroutine
+from typing import TypeVar
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-T = TypeVar("T")
 
 from app.database import SyncSession, set_tenant_rls_sync
 from app.models.document import Document
@@ -17,6 +16,8 @@ from app.workers.parsers.docx_parser import parse_docx
 from app.workers.parsers.pdf_parser import parse_pdf
 from app.workers.parsers.txt_parser import parse_txt
 from app.workers.parsers.url_parser import parse_url
+
+T = TypeVar("T")
 
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 150
@@ -96,7 +97,7 @@ def ingest_document(self, doc_id: str, tenant_id: str):
                         "filename": doc.filename,
                         "embedding": embedding,
                     }
-                    for j, (chunk, embedding) in enumerate(zip(batch, embeddings))
+                    for j, (chunk, embedding) in enumerate(zip(batch, embeddings, strict=True))
                 ]
                 all_vectors.extend(vectors)
 
@@ -114,7 +115,7 @@ def ingest_document(self, doc_id: str, tenant_id: str):
         raise
     except Exception as exc:
         _mark_document_failed(doc_id, tenant_id, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=30)
@@ -148,7 +149,7 @@ def ingest_notion_page(self, doc_id: str, tenant_id: str, text: str, filename: s
                         "filename": filename,
                         "embedding": embedding,
                     }
-                    for j, (chunk, embedding) in enumerate(zip(batch, embeddings))
+                    for j, (chunk, embedding) in enumerate(zip(batch, embeddings, strict=True))
                 ]
                 all_vectors.extend(vectors)
 
@@ -161,4 +162,4 @@ def ingest_notion_page(self, doc_id: str, tenant_id: str, text: str, filename: s
 
     except Exception as exc:
         _mark_document_failed(doc_id, tenant_id, exc)
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc

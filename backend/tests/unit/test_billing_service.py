@@ -51,3 +51,37 @@ async def test_create_portal_session_commits():
             url = await create_portal_session(tenant, db)
             assert url == "https://portal"
             db.commit.assert_awaited()
+
+
+def test_parse_webhook_event_returns_plain_dicts(monkeypatch):
+    import json
+    import time
+
+    import stripe
+
+    from app.services import billing_service
+
+    secret = "whsec_test_secret"
+    monkeypatch.setattr(billing_service.settings, "STRIPE_WEBHOOK_SECRET", secret)
+    payload = json.dumps(
+        {
+            "id": "evt_1",
+            "object": "event",
+            "type": "customer.subscription.updated",
+            "data": {"object": {"id": "sub_1", "customer": "cus_1", "metadata": {"tenant_id": "t"}}},
+        }
+    )
+    ts = int(time.time())
+    sig = stripe.WebhookSignature._compute_signature(f"{ts}.{payload}", secret)
+    event = billing_service.parse_webhook_event(payload.encode(), f"t={ts},v1={sig}")
+    obj = event["data"]["object"]
+    assert isinstance(obj, dict)
+    assert obj.get("metadata", {}).get("tenant_id") == "t"
+
+
+def test_period_end_reads_item_level_field():
+    from app.services.billing_service import _period_end
+
+    assert _period_end({"current_period_end": 10}) == 10
+    assert _period_end({"items": {"data": [{"current_period_end": 20}]}}) == 20
+    assert _period_end({}) is None

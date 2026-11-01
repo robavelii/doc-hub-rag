@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import stripe
 from fastapi import HTTPException
@@ -96,10 +96,28 @@ async def _sync_subscription_plan(tenant: Tenant, sub_obj: dict, db: AsyncSessio
     return plan
 
 
+def parse_webhook_event(payload: bytes, sig_header: str) -> dict:
+    """Verify the Stripe signature and return the event as plain nested dicts.
+
+    stripe-python >= 13 StripeObjects are no longer dict subclasses (no .get()),
+    so handlers work on a plain-dict copy.
+    """
+    event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
+    return event.to_dict()
+
+
+def _period_end(sub_obj: dict) -> int | None:
+    """current_period_end moved from the subscription to its items in API 2025-03-31."""
+    if sub_obj.get("current_period_end"):
+        return sub_obj["current_period_end"]
+    items = (sub_obj.get("items") or {}).get("data") or []
+    return items[0].get("current_period_end") if items else None
+
+
 async def handle_webhook_event(payload: bytes, sig_header: str, db: AsyncSession) -> None:
     if not settings.STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook secret not configured")
-    event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
+    event = parse_webhook_event(payload, sig_header)
 
     async with get_admin_db_context() as admin_db:
         existing = await admin_db.get(StripeWebhookEvent, event["id"])
@@ -136,9 +154,9 @@ async def handle_webhook_event(payload: bytes, sig_header: str, db: AsyncSession
             if sub:
                 sub.status = sub_obj.get("status", "inactive")
                 sub.stripe_subscription_id = sub_obj.get("id")
-                period_end = sub_obj.get("current_period_end")
+                period_end = _period_end(sub_obj)
                 if period_end:
-                    sub.current_period_end = datetime.fromtimestamp(period_end, tz=timezone.utc)
+                    sub.current_period_end = datetime.fromtimestamp(period_end, tz=UTC)
                 tenant = await admin_db.get(Tenant, sub.tenant_id)
                 if tenant and sub_obj.get("status") in ("active", "trialing"):
                     await set_tenant_rls(admin_db, str(tenant.id))

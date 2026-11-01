@@ -32,3 +32,6 @@ minio_data/
 *.log
 
 # Keep project documentation versioned.
+
+# Celery beat local state
+celerybeat-schedule*

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -16,7 +16,7 @@ PLAN_LIMITS = {
 
 
 async def get_monthly_token_usage(tenant_id: str, db: AsyncSession) -> int:
-    start_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_month = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
         select(func.sum(UsageEvent.tokens))
         .where(UsageEvent.tenant_id == tenant_id)
@@ -44,7 +44,7 @@ async def get_storage_usage_admin(tenant_id: str) -> int:
 
 
 async def get_global_token_usage_admin() -> int:
-    start_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    start_of_month = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     async with get_admin_db_context() as admin_db:
         result = await admin_db.execute(
             select(func.sum(UsageEvent.tokens))

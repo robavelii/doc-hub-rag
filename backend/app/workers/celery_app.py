@@ -11,7 +11,7 @@ celery.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    beat_schedule_filename="/tmp/celerybeat-schedule",
+    beat_schedule_filename="/tmp/celerybeat-schedule",  # noqa: S108 - container-local state
     imports=(
         "app.workers.ingest_task",
         "app.workers.sync_task",

@@ -1,8 +1,8 @@
 import httpx
 
 from app.config import settings
-from app.providers.fallback_provider import FallbackProvider
 from app.providers.factory import get_ai_provider
+from app.providers.fallback_provider import FallbackProvider
 
 
 async def check_ollama_reachable() -> dict:

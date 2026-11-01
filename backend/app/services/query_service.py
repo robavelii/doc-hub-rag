@@ -3,7 +3,7 @@ import json
 import re
 import time
 import uuid
-from typing import AsyncIterator, List, Optional
+from collections.abc import AsyncIterator
 
 from rank_bm25 import BM25Okapi
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -135,7 +135,7 @@ def _rank_chunks(question: str, candidates: list) -> tuple[list, float]:
     use_mock_scoring = _uses_mock_scoring()
 
     combined = []
-    for candidate, norm_bm, _raw_bm in zip(candidates, norm_bm25, raw_bm25):
+    for candidate, norm_bm, _raw_bm in zip(candidates, norm_bm25, raw_bm25, strict=True):
         text_lower = candidate["metadata"]["text"].lower()
         keyword_score = (
             sum(1 for term in query_terms if term in text_lower) / max(len(query_terms), 1)
@@ -197,7 +197,7 @@ async def run_rag_query(
     question: str,
     tenant_id: str,
     db: AsyncSession,
-    conversation_history: Optional[List[dict]] = None,
+    conversation_history: list[dict] | None = None,
 ) -> dict:
     start = time.time()
     cache_key = hashlib.sha256(f"{tenant_id}:{question}".encode()).hexdigest()
@@ -341,7 +341,7 @@ async def stream_rag_query(
     question: str,
     tenant_id: str,
     db: AsyncSession,
-    conversation_history: Optional[List[dict]] = None,
+    conversation_history: list[dict] | None = None,
     conversation_id: str | None = None,
 ) -> AsyncIterator[str]:
     stream_start = time.time()

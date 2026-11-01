@@ -1,11 +1,10 @@
 import json
-from typing import Optional
 
 import redis.asyncio as redis
 
 from app.config import settings
 
-_redis_client: Optional[redis.Redis] = None
+_redis_client: redis.Redis | None = None
 
 
 async def get_redis() -> redis.Redis:
@@ -15,7 +14,7 @@ async def get_redis() -> redis.Redis:
     return _redis_client
 
 
-async def get_cache(key: str) -> Optional[str]:
+async def get_cache(key: str) -> str | None:
     client = await get_redis()
     return await client.get(f"rag:{key}")
 
@@ -30,6 +29,6 @@ async def delete_cache(key: str) -> None:
     await client.delete(f"rag:{key}")
 
 
-async def get_cache_json(key: str) -> Optional[dict]:
+async def get_cache_json(key: str) -> dict | None:
     raw = await get_cache(key)
     return json.loads(raw) if raw else None

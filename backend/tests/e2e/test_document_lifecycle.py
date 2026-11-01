@@ -13,7 +13,6 @@ from tests.e2e.helpers import (
     login,
     register_tenant,
     unique_email,
-    upload_txt_file,
 )
 
 pytestmark = pytest.mark.e2e

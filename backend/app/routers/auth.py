@@ -1,7 +1,8 @@
 import hashlib
+import logging
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
@@ -36,6 +37,7 @@ from app.services.billing_service import ensure_stripe_customer
 from app.services.email_service import send_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 class RegisterRequest(BaseModel):
@@ -126,7 +128,7 @@ async def _send_verification_email(db: AsyncSession, user: User) -> str:
     row = EmailVerificationToken(
         user_id=user.id,
         token_hash=token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
     )
     db.add(row)
     await db.flush()
@@ -179,8 +181,8 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
 
     try:
         await ensure_stripe_customer(tenant, body.email, db)
-    except Exception:
-        pass
+    except Exception as exc:  # billing is optional at signup; never block registration
+        logger.warning("stripe customer creation failed for tenant %s: %s", tenant.id, exc)
 
     verify_token = await _send_verification_email(db, user)
     response = await _issue_auth_response(db, user, tenant)
@@ -249,7 +251,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request, db: Asy
         row = PasswordResetToken(
             user_id=user.id,
             token_hash=hash_opaque_token(raw_token),
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
         db.add(row)
         await db.commit()
@@ -274,7 +276,7 @@ async def reset_password(body: ResetPasswordRequest, request: Request, db: Async
         )
     )
     row = result.scalar_one_or_none()
-    if not row or row.expires_at < datetime.now(timezone.utc):
+    if not row or row.expires_at < datetime.now(UTC):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     user = await db.get(User, row.user_id)
@@ -282,7 +284,7 @@ async def reset_password(body: ResetPasswordRequest, request: Request, db: Async
         raise HTTPException(status_code=400, detail="Invalid token")
 
     user.password_hash = hash_password(body.new_password)
-    row.used_at = datetime.now(timezone.utc)
+    row.used_at = datetime.now(UTC)
     await revoke_user_refresh_tokens(db, user.id)
     await db.commit()
     await log_audit(db, "password_reset", tenant_id=str(user.tenant_id), user_id=str(user.id), ip_address=_client_ip(request))
@@ -299,7 +301,7 @@ async def verify_email(body: VerifyEmailRequest, db: AsyncSession = Depends(get_
         )
     )
     row = result.scalar_one_or_none()
-    if not row or row.expires_at < datetime.now(timezone.utc):
+    if not row or row.expires_at < datetime.now(UTC):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
     user = await db.get(User, row.user_id)
@@ -307,7 +309,7 @@ async def verify_email(body: VerifyEmailRequest, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=400, detail="Invalid token")
 
     user.email_verified = True
-    row.verified_at = datetime.now(timezone.utc)
+    row.verified_at = datetime.now(UTC)
     await db.commit()
     return {"ok": True}
 
@@ -328,7 +330,7 @@ async def invite_member(
         email=body.email,
         role=body.role,
         token_hash=token_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
     )
     db.add(invite)
     await db.commit()
@@ -349,7 +351,7 @@ async def accept_invite(body: AcceptInviteRequest, request: Request, db: AsyncSe
         invite = result.scalar_one_or_none()
     if not invite or invite.accepted_at:
         raise HTTPException(status_code=400, detail="Invalid invite")
-    if invite.expires_at < datetime.now(timezone.utc):
+    if invite.expires_at < datetime.now(UTC):
         raise HTTPException(status_code=400, detail="Invite expired")
 
     await set_tenant_rls(db, str(invite.tenant_id))
@@ -366,7 +368,7 @@ async def accept_invite(body: AcceptInviteRequest, request: Request, db: AsyncSe
         email_verified=True,
     )
     db.add(user)
-    invite.accepted_at = datetime.now(timezone.utc)
+    invite.accepted_at = datetime.now(UTC)
     await db.flush()
 
     tenant = await db.get(Tenant, invite.tenant_id)
