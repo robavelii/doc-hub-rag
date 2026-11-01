@@ -7,13 +7,14 @@ import { Button, Card, Input, Skeleton, useToast } from '../components/ui'
 import UsageBar from '../components/UsageBar'
 import { cn } from '../lib/cn'
 
-type Tab = 'profile' | 'team' | 'access' | 'sso' | 'keys' | 'billing' | 'danger'
+type Tab = 'profile' | 'team' | 'access' | 'sso' | 'compliance' | 'keys' | 'billing' | 'danger'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'team', label: 'Team' },
   { id: 'access', label: 'Access' },
   { id: 'sso', label: 'SSO' },
+  { id: 'compliance', label: 'Compliance' },
   { id: 'keys', label: 'API Keys' },
   { id: 'billing', label: 'Billing' },
   { id: 'danger', label: 'Danger Zone' },
@@ -25,7 +26,7 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>(initialTab && TABS.some((t) => t.id === initialTab) ? initialTab : 'profile')
   const { user, tenant } = useAuthStore()
   const { toast } = useToast()
-  const visibleTabs = TABS.filter((t) => !['access', 'sso'].includes(t.id) || user?.role !== 'member')
+  const visibleTabs = TABS.filter((t) => !['access', 'sso', 'compliance'].includes(t.id) || user?.role !== 'member')
 
   return (
     <div>
@@ -48,6 +49,7 @@ export default function Settings() {
       {tab === 'team' && <TeamTab toast={toast} />}
       {tab === 'access' && <AccessTab toast={toast} />}
       {tab === 'sso' && <SsoTab toast={toast} />}
+      {tab === 'compliance' && <ComplianceTab toast={toast} />}
       {tab === 'keys' && <ApiKeysTab toast={toast} />}
       {tab === 'billing' && <BillingTab toast={toast} />}
       {tab === 'danger' && <DangerTab tenant={tenant} toast={toast} />}
@@ -358,6 +360,77 @@ function SsoTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
             </Button>
           </div>
         )}
+      </Card>
+    </div>
+  )
+}
+
+function ComplianceTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
+  const [content, setContent] = useState('')
+  const [audit, setAudit] = useState('')
+  const [entries, setEntries] = useState<{ id: string; created_at: string; action: string; user_email: string | null }[]>([])
+
+  useEffect(() => {
+    void api.get<{ content_retention_days: number | null; audit_retention_days: number | null }>('/settings/retention').then(({ data }) => {
+      setContent(data.content_retention_days?.toString() ?? '')
+      setAudit(data.audit_retention_days?.toString() ?? '')
+    })
+    void api.get('/audit-logs', { params: { limit: 20 } }).then(({ data }) => setEntries(data))
+  }, [])
+
+  const save = async () => {
+    try {
+      await api.put('/settings/retention', {
+        content_retention_days: content ? Number(content) : null,
+        audit_retention_days: audit ? Number(audit) : null,
+      })
+      toast('success', 'Retention saved', 'Older data is removed nightly')
+    } catch (err) {
+      toast('error', errorDetail(err, 'Could not save retention'))
+    }
+  }
+
+  const download = async (format: 'csv' | 'jsonl') => {
+    try {
+      const { data } = await api.get(`/audit-logs/export`, { params: { format }, responseType: 'blob' })
+      const url = URL.createObjectURL(data as Blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `audit-log.${format}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast('error', 'Export failed')
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card className="p-6 space-y-3">
+        <h3 className="font-semibold">Data retention</h3>
+        <p className="text-xs text-muted">Leave empty to keep data forever. Documents and billing records are never removed automatically.</p>
+        <label className="block text-sm" htmlFor="ret-content">Questions, answers and conversations (days)
+          <Input id="ret-content" type="number" min={1} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Keep forever" />
+        </label>
+        <label className="block text-sm" htmlFor="ret-audit">Audit log (days, minimum 90)
+          <Input id="ret-audit" type="number" min={90} value={audit} onChange={(e) => setAudit(e.target.value)} placeholder="Keep forever" />
+        </label>
+        <Button onClick={() => void save()}>Save</Button>
+      </Card>
+      <Card className="p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">Audit log</h3>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void download('csv')}>Export CSV</Button>
+            <Button size="sm" variant="secondary" onClick={() => void download('jsonl')}>Export JSONL</Button>
+          </div>
+        </div>
+        {entries.map((e) => (
+          <div key={e.id} className="flex justify-between text-xs border-b border-border-subtle py-1">
+            <span className="font-mono">{e.action}</span>
+            <span className="text-muted">{e.user_email ?? 'system'} · {new Date(e.created_at).toLocaleString()}</span>
+          </div>
+        ))}
       </Card>
     </div>
   )

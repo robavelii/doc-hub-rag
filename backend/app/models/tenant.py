@@ -24,6 +24,9 @@ class Tenant(Base):
     # When true, members and admins must sign in through the tenant's SSO; owners keep password login
     # as a break-glass path.
     sso_enforced = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Data retention (days). NULL keeps data forever. Applied nightly by workers/retention_task.py.
+    content_retention_days = Column(Integer, nullable=True)  # questions, answers, conversations
+    audit_retention_days = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
