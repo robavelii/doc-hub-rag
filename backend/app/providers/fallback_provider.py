@@ -74,6 +74,16 @@ class FallbackProvider(AIProvider):
         self._record_embed(self._embedding_provider)
         return result
 
+    async def embed_query(self, text: str) -> list[float]:
+        try:
+            result = await asyncio.wait_for(self._embedding_provider.embed_query(text), timeout=self._timeout)
+        except Exception as exc:
+            raise EmbeddingUnavailableError(
+                f"Embedding provider {self._provider_label(self._embedding_provider)} failed: {exc!r}"
+            ) from exc
+        self._record_embed(self._embedding_provider)
+        return result
+
     async def embed_single(self, text: str) -> list[float]:
         embeddings = await self.embed_texts([text])
         return embeddings[0]

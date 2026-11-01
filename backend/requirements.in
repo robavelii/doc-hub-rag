@@ -27,9 +27,9 @@ Pillow
 python-docx
 beautifulsoup4
 trafilatura
-rank-bm25
 httpx
 python-multipart
 stripe
 prometheus-fastapi-instrumentator
 sentry-sdk
+fastembed

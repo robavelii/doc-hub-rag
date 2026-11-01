@@ -7,7 +7,7 @@ from app.config import settings
 from app.providers.base import AIProvider
 
 _CHUNK_RE = re.compile(
-    r"\[([0-9a-f-]{36})\] \(from ([^)]+)\):\n(.*?)(?=\n\n---|\Z)",
+    r"\[(\d+)\] \(from ([^\n]+)\):\n(.*?)(?=\n\n---|\Z)",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -75,7 +75,7 @@ class MockProvider(AIProvider):
 
         selected = self._select_chunks(chunks, question)
         parts = [text for _, _, text in selected]
-        citations = " ".join(f"[source:{chunk_id}]" for chunk_id, _, _ in selected)
+        citations = "".join(f"[{n}]" for n, _, _ in selected)
         return f"{' '.join(parts)} {citations}".strip()
 
     async def chat_completion(self, messages: list, max_tokens: int = 1000) -> str:

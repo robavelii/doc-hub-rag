@@ -6,6 +6,7 @@ import httpx
 from app.config import settings
 from app.providers.base import AIProvider
 from app.providers.fallback_provider import FallbackProvider
+from app.providers.local_provider import LocalProvider
 from app.providers.mock import MockProvider
 from app.providers.ollama_provider import OllamaProvider
 from app.providers.openai_provider import OpenAIProvider
@@ -38,37 +39,36 @@ def _build_chat_provider(name: str) -> AIProvider | None:
     return None
 
 
-def _build_embedding_provider() -> AIProvider:
-    mock = MockProvider()
-    chain = [settings.embedding_provider_name]
-    if "openai" not in chain and settings.OPENAI_API_KEY:
-        chain.insert(0, "openai")
-    if "ollama" not in chain:
-        chain.append("ollama")
-    chain.append("mock")
+class EmbeddingConfigError(RuntimeError):
+    pass
 
-    seen: set[str] = set()
-    for name in chain:
-        if name in seen:
-            continue
-        seen.add(name)
-        if name == "openai":
-            if not settings.OPENAI_API_KEY:
-                continue
-            return OpenAIProvider()
-        if name == "ollama":
-            if not _ollama_reachable():
-                continue
-            if settings.EMBEDDING_DIMENSIONS != OLLAMA_EMBED_DIM:
-                logger.warning(
-                    "Ollama embeddings require EMBEDDING_DIMENSIONS=%s (current: %s). "
-                    "Run: alembic upgrade head && python scripts/reembed_documents.py",
-                    OLLAMA_EMBED_DIM,
-                    settings.EMBEDDING_DIMENSIONS,
-                )
-                continue
-            return OllamaProvider()
-    return mock
+
+def _build_embedding_provider() -> AIProvider:
+    """Exactly the configured provider.
+
+    Vectors from different models are not comparable, so silently switching
+    provider (because a key exists, or a server was unreachable at boot) would
+    mix incompatible vectors in one index. Misconfiguration fails loudly instead.
+    """
+    name = settings.embedding_provider_name
+    if name == "openai":
+        if not settings.OPENAI_API_KEY:
+            raise EmbeddingConfigError("EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is not set")
+        return OpenAIProvider()
+    if name == "ollama":
+        if settings.EMBEDDING_DIMENSIONS != OLLAMA_EMBED_DIM:
+            raise EmbeddingConfigError(
+                f"Ollama embeddings require EMBEDDING_DIMENSIONS={OLLAMA_EMBED_DIM} "
+                f"(current: {settings.EMBEDDING_DIMENSIONS})"
+            )
+        if not _ollama_reachable():
+            logger.warning("Ollama is not reachable yet; embedding calls will fail until it is")
+        return OllamaProvider()
+    if name == "local":
+        return LocalProvider()
+    if name == "mock":
+        return MockProvider()
+    raise EmbeddingConfigError(f"Unknown EMBEDDING_PROVIDER: {name!r}")
 
 
 @lru_cache

@@ -23,8 +23,17 @@ class Settings(BaseSettings):
     OLLAMA_CHAT_MODEL: str = "llama3.2:1b"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
     CHAT_PROVIDER_CHAIN: str = "openai,ollama,mock"
-    EMBEDDING_PROVIDER: str = "openai"
+    EMBEDDING_PROVIDER: str = ""  # empty = follow AI_PROVIDER; never falls back
     PROVIDER_TIMEOUT_SECONDS: int = 30
+
+    # In-process models (EMBEDDING_PROVIDER=local, RERANKER=local)
+    LOCAL_EMBED_MODEL: str = "BAAI/bge-small-en-v1.5"
+    LOCAL_RERANK_MODEL: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    LOCAL_MODEL_CACHE_DIR: str = ""
+    RERANKER: str = "local"  # local | none
+    # Fused candidates sent to the reranker. Evals: 8-12 gave the best hit@1 and
+    # ~220-310 ms on CPU; larger pools cost latency without improving quality.
+    RERANK_POOL: int = 10
 
     S3_ENDPOINT: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"

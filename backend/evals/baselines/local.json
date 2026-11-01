@@ -1,0 +1,14 @@
+{
+  "config": {
+    "embedding_provider": "local",
+    "embedding_dimensions": 384,
+    "reranker": "local"
+  },
+  "overall": {
+    "n": 106,
+    "hit@1": 0.849,
+    "hit@3": 0.962,
+    "hit@6": 0.991,
+    "mrr@6": 0.908
+  }
+}

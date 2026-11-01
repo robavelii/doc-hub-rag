@@ -103,6 +103,7 @@ jobs:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
       AI_PROVIDER: mock
+      RERANKER: none # API behaviour tests; retrieval quality is the retrieval-eval job
       SUPERADMIN_PASSWORD: ci-superadmin-password
       REQUIRE_SERVICES: "1" # missing services fail the job instead of skipping tests
     defaults:
@@ -140,6 +141,62 @@ jobs:
         with:
           name: coverage-services
           path: backend/coverage-*.xml
+
+  retrieval-eval:
+    name: retrieval eval (local embeddings + reranker)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: ragdb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql+asyncpg://app_user:app_user_dev_password@localhost:5432/ragdb
+      DATABASE_SYNC_URL: postgresql://app_user:app_user_dev_password@localhost:5432/ragdb
+      DATABASE_ADMIN_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+      DATABASE_APP_PASSWORD: app_user_dev_password
+      POSTGRES_PASSWORD: postgres
+      REDIS_URL: redis://localhost:6379/0
+      AI_PROVIDER: mock
+      EMBEDDING_PROVIDER: local
+      EMBEDDING_DIMENSIONS: "384"
+      RERANKER: local
+      LOCAL_MODEL_CACHE_DIR: /home/runner/.cache/doc-hub-models
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/doc-hub-models
+          key: fastembed-models-${{ hashFiles('backend/app/config.py') }}
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Migrate
+        run: alembic upgrade head
+        env:
+          DATABASE_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+      - name: Retrieval eval vs baseline
+        run: python -m evals.run_eval --check evals/baselines/local.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: retrieval-eval-report
+          path: backend/evals/results/latest.json
 
   frontend:
     name: frontend · ${{ matrix.app }}
@@ -191,7 +248,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [backend-lint, backend-unit, backend-services, frontend, docker-build]
+    needs: [backend-lint, backend-unit, backend-services, retrieval-eval, frontend, docker-build]
     runs-on: ubuntu-latest
     steps:
       - name: All required jobs passed

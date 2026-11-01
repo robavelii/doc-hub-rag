@@ -1,191 +1,58 @@
+"""Answering questions: cache → (condense follow-up) → retrieve → prompt → generate → log."""
+
 import hashlib
 import json
 import logging
-import re
 import time
 import uuid
 from collections.abc import AsyncIterator
 
-from rank_bm25 import BM25Okapi
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.providers import get_ai_provider
 from app.providers.fallback_provider import FallbackProvider
 from app.services.cache_service import get_cache, get_corpus_version, set_cache
-from app.services.embedding_service import embed_single
-from app.services.vector_service import search_chunks_by_keywords, search_vectors
+from app.services.citations import StreamingCitationRewriter, rewrite_citations
+from app.services.retrieval import CONTEXT_CHUNK_COUNT, RetrievedChunk, retrieve
 
 logger = logging.getLogger(__name__)
 
-VECTOR_TOP_K = 40
-KEYWORD_TOP_K = 20
-CONTEXT_CHUNK_COUNT = 6
 MAX_CONTEXT_CHARS = 6000
 HISTORY_FOR_PROMPT = 10
 CACHE_TTL_SECONDS = 3600
 # Per-message overhead of the chat format (role, separators); OpenAI documents ~3-4 tokens.
 TOKENS_PER_MESSAGE = 4
+NO_DOCUMENTS_ANSWER = "I don't have any documents to search. Please upload some documents first."
 
-SYSTEM_PROMPT = """You are a document Q&A assistant. Answer using ONLY the Context below.
+SYSTEM_PROMPT = """You are a document Q&A assistant. Answer using ONLY the numbered Context passages below.
 
 RULES:
 1. Answer the specific question directly and concisely first (a name, number, date, or one short sentence).
 2. Add supporting detail only when it helps; do NOT reproduce entire documents or long excerpts.
 3. Quote only the minimal line or figure that supports your answer.
-4. Cite every fact with [source:CHUNK_ID] using the exact chunk IDs from Context.
-5. If Context has no relevant information, say: "I don't have that information in the current knowledge base."
+4. Cite every fact with the passage number in square brackets, e.g. [1] or [2][3]. Never invent numbers.
+5. If the Context has no relevant information, say: "I don't have that information in the current knowledge base."
 
 Context:
 {context}
 """
 
-_QUERY_STOPWORDS = frozenset(
-    {
-        "what", "when", "where", "which", "who", "whom", "whose", "how", "why",
-        "is", "are", "was", "were", "the", "a", "an", "do", "does", "did",
-        "can", "could", "would", "should", "tell", "about", "me", "my",
-        "and", "for", "non", "any", "all", "this", "that", "with", "from",
-    }
-)
+CONDENSE_PROMPT = """Rewrite the user's latest message as one standalone search query that can be
+understood without the conversation. Keep names, numbers and technical terms. Return only the query."""
+
+__all__ = [
+    "CONTEXT_CHUNK_COUNT",
+    "SYSTEM_PROMPT",
+    "build_cache_key",
+    "complete_rag_query",
+    "count_prompt_tokens",
+    "run_rag_query",
+    "stream_rag_query",
+]
 
 
-
-def _query_terms(question: str) -> list[str]:
-    terms: list[str] = []
-    lower = question.lower()
-
-    for phrase in re.findall(r"[a-z0-9]+(?:-[a-z0-9]+)+", lower):
-        if len(phrase) > 2 and phrase not in _QUERY_STOPWORDS:
-            terms.append(phrase)
-
-    for word in re.findall(r"[a-z0-9']+", lower):
-        cleaned = re.sub(r"'s$", "", word.strip("'"))
-        if len(cleaned) > 2 and cleaned not in _QUERY_STOPWORDS and cleaned not in terms:
-            terms.append(cleaned)
-
-    return terms
-
-
-def _expand_search_terms(terms: list[str]) -> list[str]:
-    # Corpus-specific synonym lists overfit to one customer's documents; general
-    # query expansion belongs in the retrieval work (rewrite + full-text search).
-    return terms[:12]
-
-
-def _merge_candidates(vector_results: list, keyword_results: list) -> list:
-    merged: dict[str, dict] = {}
-    for candidate in vector_results:
-        merged[candidate["id"]] = candidate
-    for candidate in keyword_results:
-        existing = merged.get(candidate["id"])
-        if existing:
-            existing["score"] = max(existing["score"], candidate["score"])
-        else:
-            merged[candidate["id"]] = candidate
-    return list(merged.values())
-
-
-def _uses_mock_scoring() -> bool:
-    return (
-        settings.embedding_provider_name == "mock"
-        or (settings.embedding_provider_name == "openai" and not settings.OPENAI_API_KEY)
-    )
-
-
-def _compute_confidence(top_chunks: list, use_mock_scoring: bool) -> float:
-    if not top_chunks:
-        return 0.0
-
-    vector_scores = [max(0.0, min(1.0, c["score"])) for c, _ in top_chunks[:4]]
-    combined_scores = [score for _, score in top_chunks[:4]]
-
-    if use_mock_scoring:
-        keyword_component = sum(combined_scores[:3]) / min(3, len(combined_scores))
-        confidence = 0.35 * (sum(vector_scores) / len(vector_scores)) + 0.65 * keyword_component
-    else:
-        strong_vectors = [s for s in vector_scores if s >= 0.45]
-        if strong_vectors:
-            confidence = sum(strong_vectors) / len(strong_vectors)
-        elif vector_scores:
-            confidence = max(vector_scores) * 0.55
-        else:
-            confidence = combined_scores[0] * 0.4 if combined_scores else 0.0
-
-    return round(min(0.92, max(0.0, confidence)), 3)
-
-
-def _rank_chunks(question: str, candidates: list) -> tuple[list, float]:
-    texts = [c["metadata"]["text"] for c in candidates]
-    tokenized = [t.lower().split() for t in texts]
-    bm25 = BM25Okapi(tokenized)
-    raw_bm25 = bm25.get_scores(question.lower().split())
-    max_bm = max(raw_bm25) if len(raw_bm25) else 0.0
-    min_bm = min(raw_bm25) if len(raw_bm25) else 0.0
-    bm_range = max_bm - min_bm or 1.0
-    norm_bm25 = [(score - min_bm) / bm_range for score in raw_bm25]
-
-    query_terms = _query_terms(question)
-    use_mock_scoring = _uses_mock_scoring()
-
-    combined = []
-    for candidate, norm_bm, _raw_bm in zip(candidates, norm_bm25, raw_bm25, strict=True):
-        text_lower = candidate["metadata"]["text"].lower()
-        keyword_score = (
-            sum(1 for term in query_terms if term in text_lower) / max(len(query_terms), 1)
-            if query_terms
-            else 0.5
-        )
-        vector_score = max(0.0, min(1.0, candidate["score"]))
-        if use_mock_scoring:
-            score = 0.1 * vector_score + 0.3 * norm_bm + 0.6 * keyword_score
-        else:
-            score = 0.65 * vector_score + 0.25 * norm_bm + 0.1 * keyword_score
-        combined.append((candidate, min(1.0, score)))
-
-    combined.sort(key=lambda item: item[1], reverse=True)
-    top_chunks = combined[:CONTEXT_CHUNK_COUNT]
-    confidence = _compute_confidence(top_chunks, use_mock_scoring)
-    return top_chunks, confidence
-
-
-def _chat_provider_metrics(provider) -> dict:
-    if isinstance(provider, FallbackProvider):
-        return {
-            "provider": provider.last_chat_provider,
-            "model": provider.last_chat_model,
-        }
-    return {
-        "provider": getattr(provider, "provider_name", provider.__class__.__name__),
-        "model": getattr(provider, "chat_model_name", "unknown"),
-    }
-
-
-def _stream_done_payload(
-    context: dict,
-    *,
-    tokens_total: int | None = None,
-    latency_ms: int | None = None,
-    from_cache: bool = False,
-    provider: str | None = None,
-    model: str | None = None,
-    query_log_id: str | None = None,
-) -> dict:
-    confidence = context.get("confidence", 0.0)
-    tier = "high" if confidence >= 0.7 else "medium" if confidence >= 0.4 else "low"
-    return {
-        "type": "done",
-        "sources": context.get("sources", []),
-        "confidence": confidence,
-        "confidence_tier": tier,
-        "tokens_total": tokens_total if tokens_total is not None else context.get("tokens_total"),
-        "latency_ms": latency_ms if latency_ms is not None else context.get("latency_ms"),
-        "from_cache": from_cache or context.get("from_cache", False),
-        "provider": provider or context.get("provider"),
-        "model": model or context.get("model"),
-        "query_log_id": query_log_id or context.get("query_log_id"),
-    }
-
+# --- cache ---------------------------------------------------------------------
 
 def _normalize_question(question: str) -> str:
     return " ".join(question.lower().split())
@@ -226,6 +93,79 @@ async def _cache_set(key: str, value: dict) -> None:
         logger.warning("answer cache write failed: %s", exc)
 
 
+# --- query understanding ---------------------------------------------------------
+
+def _has_real_chat_model(provider) -> bool:
+    if isinstance(provider, FallbackProvider):
+        return any(name != "mock" for name in provider.chat_provider_names)
+    return getattr(provider, "provider_name", "mock") != "mock"
+
+
+async def build_search_query(question: str, history: list[dict] | None) -> str:
+    """Turn a follow-up ("what about the second one?") into a self-contained query.
+
+    Uses the chat model when one is configured; otherwise (or on failure) falls
+    back to prefixing the previous user message, which still carries the topic.
+    With no history the question is used as is, unless ENABLE_QUERY_REWRITE is on.
+    """
+    previous_user = next((m["content"] for m in reversed(history or []) if m.get("role") == "user"), "")
+    if not previous_user and not settings.ENABLE_QUERY_REWRITE:
+        return question
+
+    provider = get_ai_provider()
+    if _has_real_chat_model(provider):
+        transcript = "\n".join(f"{m['role']}: {m['content'][:500]}" for m in (history or [])[-6:])
+        try:
+            rewritten = await provider.chat_completion(
+                [
+                    {"role": "system", "content": CONDENSE_PROMPT},
+                    {"role": "user", "content": f"Conversation:\n{transcript}\n\nLatest message: {question}"},
+                ],
+                max_tokens=80,
+            )
+            rewritten = rewritten.strip().strip('"')
+            if rewritten:
+                return rewritten
+        except Exception as exc:
+            logger.warning("query condensing failed, using heuristic: %s", exc)
+    return f"{previous_user} {question}".strip()
+
+
+# --- prompt -----------------------------------------------------------------------
+
+def _passage_header(n: int, chunk: RetrievedChunk) -> str:
+    location = [chunk.filename]
+    if chunk.metadata.get("heading"):
+        location.append(chunk.metadata["heading"])
+    if chunk.metadata.get("page"):
+        location.append(f"page {chunk.metadata['page']}")
+    return f"[{n}] (from {' · '.join(location)}):"
+
+
+def build_context(chunks: list[RetrievedChunk]) -> tuple[str, list[RetrievedChunk]]:
+    parts, used, size = [], [], 0
+    for chunk in chunks:
+        block = f"{_passage_header(len(used) + 1, chunk)}\n{chunk.text}"
+        if size + len(block) > MAX_CONTEXT_CHARS and parts:
+            break
+        parts.append(block)
+        used.append(chunk)
+        size += len(block)
+    return "\n\n---\n\n".join(parts), used
+
+
+def _source(n: int, chunk: RetrievedChunk) -> dict:
+    return {
+        "n": n,
+        "id": chunk.id,
+        "filename": chunk.filename,
+        "text": chunk.text[:200],
+        "doc_id": chunk.doc_id,
+        "heading": chunk.metadata.get("heading"),
+        "page": chunk.metadata.get("page"),
+    }
+
+
 def count_prompt_tokens(provider, messages: list[dict]) -> int:
     return sum(provider.count_tokens(m.get("content") or "") + TOKENS_PER_MESSAGE for m in messages)
 
@@ -239,8 +179,8 @@ async def run_rag_query(
 ) -> dict:
     """Retrieve context and build the prompt.
 
-    `question` is what the user asked (goes in the prompt); `search_query` is an
-    optional rewrite used only for retrieval.
+    `question` is what the user asked (goes in the prompt); retrieval uses
+    `search_query`, or a condensed version of the question when it is a follow-up.
     """
     start = time.time()
     cache_key = await build_cache_key(tenant_id, question, conversation_history)
@@ -248,46 +188,12 @@ async def run_rag_query(
     if cached:
         return {**json.loads(cached), "from_cache": True}
 
-    retrieval_text = search_query or question
-    search_terms = _expand_search_terms(_query_terms(retrieval_text))
+    query = search_query or await build_search_query(question, conversation_history)
+    result = await retrieve(db, tenant_id, query, top_k=CONTEXT_CHUNK_COUNT)
+    if not result.chunks:
+        return {"answer": NO_DOCUMENTS_ANSWER, "sources": [], "confidence": 0.0, "from_cache": False}
 
-    vector_candidates: list = []
-    try:
-        query_embedding = await embed_single(retrieval_text)
-        vector_candidates = await search_vectors(db, tenant_id, query_embedding, top_k=VECTOR_TOP_K)
-    except Exception as exc:
-        # Keyword retrieval still answers many questions; better than a 500.
-        logger.warning("vector search unavailable, using keyword search only: %s", exc)
-    keyword_candidates = await search_chunks_by_keywords(db, tenant_id, search_terms, top_k=KEYWORD_TOP_K)
-    candidates = _merge_candidates(vector_candidates, keyword_candidates)
-
-    if not candidates:
-        return {
-            "answer": "I don't have any documents to search. Please upload some documents first.",
-            "sources": [],
-            "confidence": 0.0,
-            "from_cache": False,
-        }
-
-    top_chunks, confidence = _rank_chunks(retrieval_text, candidates)
-
-    context_parts = []
-    source_ids = []
-    context_size = 0
-    for chunk, _ in top_chunks:
-        chunk_id = chunk["id"]
-        text = chunk["metadata"]["text"]
-        filename = chunk["metadata"].get("filename", "document")
-        block = f"[{chunk_id}] (from {filename}):\n{text}"
-        if context_size + len(block) > MAX_CONTEXT_CHARS and context_parts:
-            break
-        context_parts.append(block)
-        source_ids.append(chunk_id)
-        context_size += len(block)
-
-    context = "\n\n---\n\n".join(context_parts)
-    ranked_for_response = [(c, s) for c, s in top_chunks if c["id"] in source_ids]
-
+    context, used = build_context(result.chunks)
     messages = [{"role": "system", "content": SYSTEM_PROMPT.format(context=context)}]
     if conversation_history:
         messages.extend(conversation_history[-HISTORY_FOR_PROMPT:])
@@ -295,65 +201,82 @@ async def run_rag_query(
 
     return {
         "messages": messages,
-        "source_ids": source_ids,
-        "sources": [
-            {
-                "id": c["id"],
-                "filename": c["metadata"].get("filename"),
-                "text": c["metadata"]["text"][:200],
-                "doc_id": c["metadata"].get("doc_id"),
-            }
-            for c, _ in ranked_for_response
-        ],
-        "confidence": round(confidence, 3),
+        "source_ids": [c.id for c in used],
+        "citation_map": {n: c.id for n, c in enumerate(used, start=1)},
+        "sources": [_source(n, c) for n, c in enumerate(used, start=1)],
+        "confidence": result.confidence,
+        "search_query": query,
         "cache_key": cache_key,
         "start_time": start,
         "question": question,
     }
 
 
-async def complete_rag_query(context: dict, tenant_id: str, db: AsyncSession) -> dict:
-    if "answer" in context:
-        return context
+# --- generation -------------------------------------------------------------------
 
-    provider = get_ai_provider()
-    answer = await provider.chat_completion(context["messages"])
+def _tier(confidence: float) -> str:
+    return "high" if confidence >= 0.7 else "medium" if confidence >= 0.4 else "low"
+
+
+def _chat_provider_metrics(provider) -> dict:
+    if isinstance(provider, FallbackProvider):
+        return {"provider": provider.last_chat_provider, "model": provider.last_chat_model}
+    return {
+        "provider": getattr(provider, "provider_name", provider.__class__.__name__),
+        "model": getattr(provider, "chat_model_name", "unknown"),
+    }
+
+
+def _stream_done_payload(
+    context: dict,
+    *,
+    tokens_total: int | None = None,
+    latency_ms: int | None = None,
+    from_cache: bool = False,
+    provider: str | None = None,
+    model: str | None = None,
+    query_log_id: str | None = None,
+) -> dict:
+    confidence = context.get("confidence", 0.0)
+    return {
+        "type": "done",
+        "sources": context.get("sources", []),
+        "confidence": confidence,
+        "confidence_tier": _tier(confidence),
+        "tokens_total": tokens_total if tokens_total is not None else context.get("tokens_total"),
+        "latency_ms": latency_ms if latency_ms is not None else context.get("latency_ms"),
+        "from_cache": from_cache or context.get("from_cache", False),
+        "provider": provider or context.get("provider"),
+        "model": model or context.get("model"),
+        "query_log_id": query_log_id or context.get("query_log_id"),
+    }
+
+
+async def _record(context: dict, tenant_id: str, db: AsyncSession, provider, answer: str) -> dict:
+    """Persist the query log + usage and cache the answer. Returns the response metrics."""
+    from app.models.query_log import QueryLog
+    from app.services.usage_service import record_query_usage
+
     metrics = _chat_provider_metrics(provider)
     latency_ms = int((time.time() - context["start_time"]) * 1000)
     tokens_total = count_prompt_tokens(provider, context["messages"]) + provider.count_tokens(answer)
 
-    from app.models.query_log import QueryLog
-    from app.services.usage_service import record_query_usage
-
     log_id = uuid.uuid4()
-    log = QueryLog(
-        id=log_id,
-        tenant_id=tenant_id,
-        question=context["question"],
-        answer=answer,
-        source_chunk_ids=[uuid.UUID(s) for s in context["source_ids"]],
-        tokens_total=tokens_total,
-        latency_ms=latency_ms,
-        confidence_score=context["confidence"],
-        from_cache=False,
+    db.add(
+        QueryLog(
+            id=log_id,
+            tenant_id=tenant_id,
+            question=context["question"],
+            answer=answer,
+            source_chunk_ids=[uuid.UUID(s) for s in context["source_ids"]],
+            tokens_total=tokens_total,
+            latency_ms=latency_ms,
+            confidence_score=context["confidence"],
+            from_cache=False,
+        )
     )
-    db.add(log)
     await db.commit()
     await record_query_usage(str(tenant_id), tokens_total, str(log_id), db)
-
-    confidence = context["confidence"]
-    tier = "high" if confidence >= 0.7 else "medium" if confidence >= 0.4 else "low"
-    result = {
-        "answer": answer,
-        "sources": context["sources"],
-        "confidence": confidence,
-        "confidence_tier": tier,
-        "from_cache": False,
-        "tokens_total": tokens_total,
-        "latency_ms": latency_ms,
-        "query_log_id": str(log_id),
-        **metrics,
-    }
     await _cache_set(
         context["cache_key"],
         {
@@ -365,21 +288,29 @@ async def complete_rag_query(context: dict, tenant_id: str, db: AsyncSession) ->
             **metrics,
         },
     )
-    return result
+    return {"tokens_total": tokens_total, "latency_ms": latency_ms, "query_log_id": str(log_id), **metrics}
 
 
-async def _maybe_rewrite_query(question: str) -> str:
-    if not settings.ENABLE_QUERY_REWRITE:
-        return question
+async def complete_rag_query(context: dict, tenant_id: str, db: AsyncSession) -> dict:
+    if "answer" in context:
+        return context
+
     provider = get_ai_provider()
-    try:
-        rewritten = await provider.chat_completion([
-            {"role": "system", "content": "Rewrite the user question for better document search. Return only the rewritten question."},
-            {"role": "user", "content": question},
-        ])
-        return rewritten.strip() or question
-    except Exception:
-        return question
+    raw = await provider.chat_completion(context["messages"])
+    answer = rewrite_citations(raw, context["citation_map"])
+    recorded = await _record(context, tenant_id, db, provider, answer)
+    return {
+        "answer": answer,
+        "sources": context["sources"],
+        "confidence": context["confidence"],
+        "confidence_tier": _tier(context["confidence"]),
+        "from_cache": False,
+        **recorded,
+    }
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
 
 
 async def stream_rag_query(
@@ -387,56 +318,28 @@ async def stream_rag_query(
     tenant_id: str,
     db: AsyncSession,
     conversation_history: list[dict] | None = None,
-    conversation_id: str | None = None,
 ) -> AsyncIterator[str]:
     stream_start = time.time()
-    search_query = await _maybe_rewrite_query(question)
-    context = await run_rag_query(question, tenant_id, db, conversation_history, search_query=search_query)
+    context = await run_rag_query(question, tenant_id, db, conversation_history)
 
     if "answer" in context:
         latency_ms = int((time.time() - stream_start) * 1000)
-        yield f"data: {json.dumps({'type': 'chunk', 'content': context['answer']})}\n\n"
-        yield f"data: {json.dumps(_stream_done_payload(context, latency_ms=latency_ms, from_cache=context.get('from_cache', False)))}\n\n"
+        yield _sse({"type": "chunk", "content": context["answer"]})
+        yield _sse(_stream_done_payload(context, latency_ms=latency_ms, from_cache=context.get("from_cache", False)))
         return
 
     provider = get_ai_provider()
+    rewriter = StreamingCitationRewriter(context["citation_map"])
     full_response = ""
     async for delta in provider.chat_completion_stream(context["messages"]):
-        full_response += delta
-        yield f"data: {json.dumps({'type': 'chunk', 'content': delta})}\n\n"
+        out = rewriter.feed(delta)
+        if out:
+            full_response += out
+            yield _sse({"type": "chunk", "content": out})
+    tail = rewriter.flush()
+    if tail:
+        full_response += tail
+        yield _sse({"type": "chunk", "content": tail})
 
-    metrics = _chat_provider_metrics(provider)
-    latency_ms = int((time.time() - context["start_time"]) * 1000)
-    tokens_total = count_prompt_tokens(provider, context["messages"]) + provider.count_tokens(full_response)
-
-    from app.models.query_log import QueryLog
-    from app.services.usage_service import record_query_usage
-
-    log_id = uuid.uuid4()
-    log = QueryLog(
-        id=log_id,
-        tenant_id=tenant_id,
-        question=context["question"],
-        answer=full_response,
-        source_chunk_ids=[uuid.UUID(s) for s in context["source_ids"]],
-        tokens_total=tokens_total,
-        latency_ms=latency_ms,
-        confidence_score=context["confidence"],
-        from_cache=False,
-    )
-    db.add(log)
-    await db.commit()
-    await record_query_usage(str(tenant_id), tokens_total, str(log_id), db)
-
-    cache_data = {
-        "answer": full_response,
-        "sources": context["sources"],
-        "confidence": context["confidence"],
-        "tokens_total": tokens_total,
-        "latency_ms": latency_ms,
-        "from_cache": False,
-        **metrics,
-    }
-    await _cache_set(context["cache_key"], cache_data)
-
-    yield f"data: {json.dumps(_stream_done_payload(context, tokens_total=tokens_total, latency_ms=latency_ms, query_log_id=str(log_id), **metrics))}\n\n"
+    recorded = await _record(context, tenant_id, db, provider, full_response)
+    yield _sse(_stream_done_payload(context, **recorded))

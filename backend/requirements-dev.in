@@ -7,3 +7,4 @@ pytest-cov
 ruff
 pip-audit
 moto[server]
+pyyaml  # evals/questions.yaml
