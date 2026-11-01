@@ -165,6 +165,27 @@ cd backend && source .venv/bin/activate
 AI_PROVIDER=openai OPENAI_API_KEY=sk-... pytest tests/e2e/test_openai_integration.py -m openai -v
 ```
 
+## Retrieval pipeline and evals
+
+Questions go through: cache → follow-up condensing (rewrites "what about the second one?" using the conversation) → **hybrid retrieval** (HNSW vector search + Postgres full-text search, merged with reciprocal rank fusion) → **cross-encoder rerank** of the top candidates → prompt with numbered passages `[1]..[n]` (rewritten to `[source:<chunk_id>]` before reaching clients).
+
+| Setting | Values | Notes |
+|---|---|---|
+| `EMBEDDING_PROVIDER` | `openai` · `ollama` · `local` · `mock` | Exactly one; no fallback. `local` = in-process `bge-small-en-v1.5`, 384 dims, no API key |
+| `RERANKER` | `local` · `none` | `local` = MiniLM cross-encoder on CPU (~250 ms/query) |
+| `RERANK_POOL` | default `10` | Candidates reranked; evals showed no gain above ~12 |
+
+Models download on first use to `LOCAL_MODEL_CACHE_DIR` (or the fastembed default cache).
+
+**Evals** (`backend/evals/`): 6 documents (4 with answers, 2 distractors), 114 questions (lexical, paraphrased, unanswerable), every answer tied to a verbatim evidence span. CI's `retrieval-eval` job fails a PR whose overall hit@k or MRR drops more than 0.02 below `evals/baselines/local.json`.
+
+```bash
+cd backend
+EMBEDDING_PROVIDER=local EMBEDDING_DIMENSIONS=384 RERANKER=local python -m evals.run_eval
+python -m evals.run_eval --check evals/baselines/local.json   # what CI runs
+python -m evals.run_eval --answers                            # also grade generated answers (needs a real LLM)
+```
+
 ## Local Model (Ollama)
 
 Run a small local model for offline testing and automatic fallback when OpenAI is unavailable.

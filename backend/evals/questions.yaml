@@ -1,0 +1,415 @@
+# Retrieval / answer evaluation set.
+#
+# evidence: verbatim spans from the corpus. A question is "hit@k" when any of the
+#   top-k retrieved chunks contains any evidence span (whitespace-insensitive).
+# kind:
+#   lexical      the question shares key terms with the source
+#   paraphrase   same meaning, different words (tests semantic retrieval)
+#   unanswerable the corpus does not contain the answer (tests refusal)
+# answer: short fact the generated answer must contain (answer evals only).
+
+handbook:
+  - q: What are the core collaboration hours?
+    evidence: ["Core collaboration hours are 10:00 to 15:00"]
+    answer: "10:00"
+    kind: lexical
+  - q: Can I schedule an internal meeting on a Friday?
+    evidence: ["no internal meetings may be scheduled on Fridays"]
+    kind: lexical
+  - q: Which countries can employees work from?
+    evidence: ["the United States, Canada, Germany, Portugal and Kenya"]
+    answer: "Kenya"
+    kind: lexical
+  - q: I want to spend six weeks working from Japan. What do I need to do?
+    evidence: ["more than 30 consecutive days requires written approval from People Operations"]
+    kind: paraphrase
+  - q: How much money do I get to set up my home desk?
+    evidence: ["home office stipend of 1,200 USD"]
+    answer: "1,200"
+    kind: paraphrase
+  - q: Will the company pay for a coworking space?
+    evidence: ["Co-working memberships are reimbursed up to 250 USD per month"]
+    answer: "250"
+    kind: paraphrase
+  - q: Where are the hub offices?
+    evidence: ["Toronto, Lisbon and Nairobi"]
+    kind: lexical
+  - q: How many vacation days do full-time employees get?
+    evidence: ["25 days of paid vacation per calendar year"]
+    answer: "25"
+    kind: lexical
+  - q: What happens to holiday days I don't use by the end of the year?
+    evidence: ["carried over up to a maximum of 10 days"]
+    answer: "10"
+    kind: paraphrase
+  - q: How many wellness days are there?
+    evidence: ["6 company-wide wellness days"]
+    answer: "6"
+    kind: lexical
+  - q: When do I need a doctor's note for being sick?
+    evidence: ["longer than that require a doctor's note"]
+    kind: lexical
+  - q: How long can a new father take off after the baby is born?
+    evidence: ["Parental leave is 20 weeks at full pay for all parents regardless of gender"]
+    answer: "20 weeks"
+    kind: paraphrase
+  - q: How much time off do I get if my grandmother dies?
+    evidence: ["3 working days for extended family"]
+    answer: "3"
+    kind: paraphrase
+  - q: How long is the probation period?
+    evidence: ["probation period of 90 days"]
+    answer: "90"
+    kind: lexical
+  - q: When are raises decided?
+    evidence: ["Compensation adjustments are only made during the November cycle"]
+    answer: "November"
+    kind: paraphrase
+  - q: How many peers give feedback in a performance review?
+    evidence: ["peer feedback from at least three colleagues"]
+    kind: lexical
+  - q: What is the deadline for submitting expenses?
+    evidence: ["within 30 days of the purchase"]
+    answer: "30 days"
+    kind: lexical
+  - q: What is the daily meal allowance when travelling?
+    evidence: ["daily limit of 75 USD"]
+    answer: "75"
+    kind: lexical
+  - q: Can I expense a glass of wine with dinner on a business trip?
+    evidence: ["Alcohol is never reimbursable"]
+    kind: paraphrase
+  - q: Can I fly business class to a conference?
+    evidence: ["Business class requires approval from the CFO"]
+    answer: "CFO"
+    kind: lexical
+  - q: What's the maximum I can spend per night on a hotel in Europe?
+    evidence: ["180 EUR in Europe"]
+    answer: "180"
+    kind: paraphrase
+  - q: Which tool do we use to book hotels?
+    evidence: ["booked through Navan"]
+    answer: "Navan"
+    kind: lexical
+  - q: Will the company reimburse my ChatGPT Plus subscription?
+    evidence: ["reimbursable up to 30 USD per month"]
+    kind: lexical
+  - q: What laptop do engineers get?
+    evidence: ["Engineers receive a 16-inch MacBook Pro"]
+    kind: lexical
+  - q: How often are computers replaced?
+    evidence: ["Laptops are refreshed every 3 years"]
+    answer: "3 years"
+    kind: paraphrase
+  - q: Can I keep my laptop when I quit?
+    evidence: ["buy your laptop at its depreciated value"]
+    kind: paraphrase
+  - q: How big is the training budget?
+    evidence: ["annual learning budget of 1,500 USD"]
+    answer: "1,500"
+    kind: paraphrase
+  - q: How do I report harassment anonymously?
+    evidence: ["anonymously through the EthicsPoint hotline"]
+    answer: "EthicsPoint"
+    kind: lexical
+  - q: A supplier wants to give me a 150 dollar gift basket. Is that OK?
+    evidence: ["worth more than 100 USD must be declared to Legal"]
+    kind: paraphrase
+  - q: What is the 401k match?
+    evidence: ["company match of 4% of base salary"]
+    answer: "4%"
+    kind: lexical
+  - q: How many free therapy sessions are included?
+    evidence: ["six free confidential counselling sessions per year"]
+    answer: "six"
+    kind: paraphrase
+  - q: What is the company's stock option vesting schedule?
+    evidence: []
+    kind: unanswerable
+  - q: Does Northwind offer a gym membership?
+    evidence: []
+    kind: unanswerable
+
+security:
+  - q: What are the data classification levels?
+    evidence: ["classified into four levels"]
+    kind: lexical
+  - q: Is customer data confidential or restricted?
+    evidence: ["Confidential: customer data"]
+    answer: "Confidential"
+    kind: lexical
+  - q: Can I keep a copy of the production database password on my laptop?
+    evidence: ["Restricted data must never be stored on laptops"]
+    kind: paraphrase
+  - q: How long must passwords be for systems that don't support SSO?
+    evidence: ["at least 16 characters long"]
+    answer: "16"
+    kind: lexical
+  - q: Where should I store passwords?
+    evidence: ["stored in 1Password"]
+    answer: "1Password"
+    kind: lexical
+  - q: Who needs a YubiKey?
+    evidence: ["required for administrators, engineers with production access and the finance team"]
+    kind: lexical
+  - q: Can I use text messages as my second login factor?
+    evidence: ["SMS codes are not an accepted second factor"]
+    kind: paraphrase
+  - q: When does my Okta session expire?
+    evidence: ["Okta sessions expire after 12 hours"]
+    answer: "12 hours"
+    kind: lexical
+  - q: How quickly does my screen need to lock?
+    evidence: ["automatic screen lock after 5 minutes of inactivity"]
+    answer: "5 minutes"
+    kind: paraphrase
+  - q: What happens if I don't install OS updates?
+    evidence: ["devices more than 30 days behind are automatically blocked from SSO"]
+    kind: paraphrase
+  - q: Can I check customer data from my home PC?
+    evidence: ["Personal computers may not be used to access source code or customer data"]
+    kind: paraphrase
+  - q: I left my laptop on the train. What should I do?
+    evidence: ["within 1 hour of discovery so they can be remotely wiped"]
+    kind: paraphrase
+  - q: How often are access reviews done?
+    evidence: ["Access reviews are performed every quarter"]
+    answer: "quarter"
+    kind: lexical
+  - q: How fast are accounts disabled when someone leaves?
+    evidence: ["disabled within 4 hours of their last working day"]
+    answer: "4 hours"
+    kind: paraphrase
+  - q: When do contractor accounts expire?
+    evidence: ["contractor accounts expire automatically after 90 days"]
+    answer: "90"
+    kind: lexical
+  - q: Do I need the VPN to reach internal tools?
+    evidence: ["Access to internal tools does not require VPN"]
+    kind: lexical
+  - q: Is it safe to work from a cafe's Wi-Fi?
+    evidence: ["Public Wi-Fi may be used"]
+    kind: paraphrase
+  - q: What does a vendor need to provide for a security review?
+    evidence: ["SOC 2 Type II report or ISO 27001 certificate"]
+    kind: lexical
+  - q: Can I paste a customer's invoice into a public AI chatbot?
+    evidence: ["Customer data must not be pasted into external AI chatbots"]
+    kind: paraphrase
+  - q: Which AI tools are approved for confidential data?
+    evidence: ["enterprise workspace of Claude and the internal Doc-Hub assistant"]
+    kind: lexical
+  - q: How do I report a security incident?
+    evidence: ["#security-incidents Slack channel"]
+    kind: lexical
+  - q: What's the security hotline number?
+    evidence: ["+1-555-0100"]
+    answer: "555-0100"
+    kind: lexical
+  - q: I clicked a link in a suspicious email. Will I get in trouble?
+    evidence: ["Clicking a phishing link is not a disciplinary matter if it is reported promptly"]
+    kind: paraphrase
+  - q: How quickly must regulators be told about a personal data breach?
+    evidence: ["notified within 72 hours as required by GDPR"]
+    answer: "72 hours"
+    kind: paraphrase
+  - q: How long are security logs kept?
+    evidence: ["retained for 13 months in the SIEM"]
+    answer: "13 months"
+    kind: lexical
+  - q: How long can a policy exception last?
+    evidence: ["valid for at most 6 months"]
+    answer: "6 months"
+    kind: lexical
+  - q: What is the password rotation interval for laptops?
+    evidence: []
+    kind: unanswerable
+  - q: Which antivirus product do we use?
+    evidence: []
+    kind: unanswerable
+
+product:
+  - q: How much is the Starter plan?
+    evidence: ["Starter: 49 USD per month"]
+    answer: "49"
+    kind: lexical
+  - q: How many users can the Growth plan have?
+    evidence: ["up to 15 users and 5,000 transactions per month"]
+    answer: "15"
+    kind: lexical
+  - q: Which plan includes SAML SSO?
+    evidence: ["Enterprise: custom pricing, unlimited users, SAML single sign-on"]
+    answer: "Enterprise"
+    kind: lexical
+  - q: Is there a discount if we pay yearly?
+    evidence: ["Annual billing gives a 20% discount"]
+    answer: "20%"
+    kind: paraphrase
+  - q: Do charities get a discount?
+    evidence: ["Nonprofits registered as charities receive an additional 30% discount"]
+    answer: "30%"
+    kind: paraphrase
+  - q: What does it cost when we go over our monthly transactions?
+    evidence: ["billed at 2 cents each"]
+    answer: "2 cents"
+    kind: paraphrase
+  - q: How long is the free trial?
+    evidence: ["21-day free trial of the Growth plan"]
+    answer: "21"
+    kind: lexical
+  - q: Do I need a credit card to try it?
+    evidence: ["No credit card is required to start the trial"]
+    kind: paraphrase
+  - q: What happens to my data if I never pay after the trial?
+    evidence: ["read-only for 30 days and is then deleted"]
+    kind: paraphrase
+  - q: Can I pay with PayPal?
+    evidence: ["PayPal is not supported"]
+    kind: lexical
+  - q: What happens when a card payment fails?
+    evidence: ["retries the charge after 3, 5 and 7 days"]
+    kind: lexical
+  - q: Can I get my money back on an annual plan?
+    evidence: ["Annual plans can be refunded on a prorated basis within the first 60 days"]
+    answer: "60 days"
+    kind: paraphrase
+  - q: Which accounting systems does Ledgerline integrate with?
+    evidence: ["QuickBooks Online, Xero and Gusto"]
+    kind: lexical
+  - q: How often are Shopify orders synced?
+    evidence: ["syncs orders every 15 minutes"]
+    answer: "15 minutes"
+    kind: lexical
+  - q: When does the Xero export run?
+    evidence: ["exports run nightly at 02:00 UTC"]
+    answer: "02:00"
+    kind: lexical
+  - q: What is the API rate limit on Enterprise?
+    evidence: ["600 requests per minute on Enterprise"]
+    answer: "600"
+    kind: lexical
+  - q: What does the API return when I send too many requests?
+    evidence: ["returns HTTP 429 with a Retry-After header"]
+    answer: "429"
+    kind: paraphrase
+  - q: How are webhooks signed?
+    evidence: ["signed with HMAC-SHA256"]
+    kind: lexical
+  - q: How long are failed webhooks retried?
+    evidence: ["retried with exponential backoff for up to 72 hours"]
+    answer: "72 hours"
+    kind: lexical
+  - q: Is Ledgerline SOC 2 certified?
+    evidence: ["SOC 2 Type II certified"]
+    kind: lexical
+  - q: Where is European customer data stored?
+    evidence: ["eu-central-1 (Frankfurt) for European customers"]
+    answer: "Frankfurt"
+    kind: paraphrase
+  - q: Can we move our account from the US region to the EU later?
+    evidence: ["cannot be changed later"]
+    kind: paraphrase
+  - q: How long are backups kept?
+    evidence: ["Daily backups are kept for 35 days"]
+    answer: "35 days"
+    kind: lexical
+  - q: Who can close the account?
+    evidence: ["Only the Owner can change the plan or close the account"]
+    kind: lexical
+  - q: Can an accountant invite new users?
+    evidence: ["cannot invite users"]
+    kind: lexical
+  - q: Do external bookkeepers count toward our seat limit?
+    evidence: ["do not count toward the user limit"]
+    kind: paraphrase
+  - q: How fast does support reply on the Growth plan?
+    evidence: ["Growth customers get chat and email support with a 4-hour response time"]
+    answer: "4-hour"
+    kind: paraphrase
+  - q: Does Ledgerline have a mobile app?
+    evidence: []
+    kind: unanswerable
+  - q: Does Ledgerline support payroll in Australia?
+    evidence: []
+    kind: unanswerable
+
+runbook:
+  - q: When does the on-call rotation hand over?
+    evidence: ["hands over every Tuesday at 11:00 UTC"]
+    answer: "Tuesday"
+    kind: lexical
+  - q: What happens if the primary doesn't answer a page?
+    evidence: ["PagerDuty escalates to the secondary"]
+    kind: paraphrase
+  - q: How much are on-call engineers paid?
+    evidence: ["flat stipend of 500 USD per week"]
+    answer: "500"
+    kind: paraphrase
+  - q: What counts as a SEV1?
+    evidence: ["SEV1: the product is down or customer data is at risk"]
+    kind: lexical
+  - q: Bank feeds are failing for all of Europe. What severity is that?
+    evidence: ["bank feeds failing for a whole region"]
+    answer: "SEV2"
+    kind: paraphrase
+  - q: When is a postmortem due?
+    evidence: ["written postmortem within 5 business days"]
+    answer: "5 business days"
+    kind: lexical
+  - q: How do I open an incident channel?
+    evidence: ["/incident new"]
+    kind: lexical
+  - q: What does the incident commander do?
+    evidence: ["The commander coordinates and does not debug"]
+    kind: lexical
+  - q: How often should status updates be posted during an incident?
+    evidence: ["every 30 minutes until resolved"]
+    answer: "30 minutes"
+    kind: lexical
+  - q: Can I deploy on a Friday afternoon?
+    evidence: ["Deploying on Fridays, weekends or during the December change freeze"]
+    kind: paraphrase
+  - q: When is the holiday code freeze?
+    evidence: ["December 15 to January 5"]
+    kind: paraphrase
+  - q: How does the canary decide to promote a release?
+    evidence: ["error rate stays below 1% and p95 latency stays below 800 ms"]
+    kind: lexical
+  - q: What's the command to roll back production?
+    evidence: ["ship rollback --env production"]
+    kind: lexical
+  - q: Are database migrations rolled back automatically?
+    evidence: ["Database migrations are not rolled back automatically"]
+    kind: lexical
+  - q: How long does a database failover take?
+    evidence: ["takes 60 to 120 seconds"]
+    kind: lexical
+  - q: A read replica is 45 seconds behind. What should I do?
+    evidence: ["ops db replica drain"]
+    kind: paraphrase
+  - q: How far back can we restore the database?
+    evidence: ["Point-in-time recovery is available for the last 14 days"]
+    answer: "14 days"
+    kind: paraphrase
+  - q: The bank-feed queue has 80,000 jobs waiting. What do I do?
+    evidence: ["ops scale feeds-worker 40"]
+    kind: paraphrase
+  - q: Is it OK to flush Redis to clear the backlog?
+    evidence: ["Do not flush the Redis broker"]
+    kind: paraphrase
+  - q: Plaid is having an outage. What should on-call do?
+    evidence: ["bankfeeds.plaid.pause"]
+    kind: lexical
+  - q: How do I get shell access to production during an incident?
+    evidence: ["Teleport with the `prod-incident` role"]
+    kind: paraphrase
+  - q: How long does incident shell access last?
+    evidence: ["expires after 4 hours"]
+    answer: "4 hours"
+    kind: lexical
+  - q: Which monitoring dashboard should I check first for latency?
+    evidence: []
+    kind: unanswerable
+  - q: What is the on-call phone number for AWS support?
+    evidence: []
+    kind: unanswerable

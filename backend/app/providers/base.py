@@ -11,6 +11,10 @@ class AIProvider(ABC):
     async def embed_single(self, text: str) -> list[float]:
         pass
 
+    async def embed_query(self, text: str) -> list[float]:
+        """Embed a search query. Models with separate query/passage encodings override this."""
+        return await self.embed_single(text)
+
     @abstractmethod
     async def chat_completion(self, messages: list, max_tokens: int = 1000) -> str:
         pass
