@@ -21,6 +21,9 @@ class Tenant(Base):
     monthly_token_limit = Column(Integer, nullable=False, default=100_000)
     storage_limit_bytes = Column(BigInteger, nullable=False, default=100 * 1024 * 1024)
     is_active = Column(Boolean, nullable=False, default=True)
+    # When true, members and admins must sign in through the tenant's SSO; owners keep password login
+    # as a break-glass path.
+    sso_enforced = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

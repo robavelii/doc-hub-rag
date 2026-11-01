@@ -85,3 +85,29 @@ def test_period_end_reads_item_level_field():
     assert _period_end({"current_period_end": 10}) == 10
     assert _period_end({"items": {"data": [{"current_period_end": 20}]}}) == 20
     assert _period_end({}) is None
+
+
+def test_validation_errors_from_model_validators_return_422_not_500():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from pydantic import BaseModel, model_validator
+
+    from app.middleware.error_handler import register_exception_handlers
+
+    class Body(BaseModel):
+        a: int | None = None
+
+        @model_validator(mode="after")
+        def check(self):
+            raise ValueError("bad body")
+
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.post("/x")
+    def endpoint(body: Body):
+        return {}
+
+    r = TestClient(app, raise_server_exceptions=False).post("/x", json={})
+    assert r.status_code == 422
+    assert "bad body" in str(r.json()["details"])

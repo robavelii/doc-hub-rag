@@ -63,8 +63,21 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = "http://localhost:3000/settings?billing=success"
     STRIPE_CANCEL_URL: str = "http://localhost:3000/settings?billing=cancel"
 
+    # Enterprise SSO + SCIM through a self-hosted Ory Polis (formerly BoxyHQ SAML Jackson)
+    POLIS_URL: str = ""  # reachable from the API, e.g. http://polis:5225
+    POLIS_PUBLIC_URL: str = ""  # reachable from browsers; defaults to POLIS_URL
+    POLIS_API_KEY: str = ""  # one of Polis' API_KEYS
+    POLIS_CLIENT_SECRET_VERIFIER: str = ""  # Polis' CLIENT_SECRET_VERIFIER
+    POLIS_WEBHOOK_SECRET: str = ""  # signs directory-sync (SCIM) webhooks
+    POLIS_PRODUCT: str = "doc-hub"
+    DASHBOARD_URL: str = "http://localhost:3000"
+
     SENTRY_DSN: str = ""
     ENABLE_QUERY_REWRITE: bool = False
+
+    @property
+    def sso_enabled(self) -> bool:
+        return bool(self.POLIS_URL and self.POLIS_API_KEY and self.POLIS_CLIENT_SECRET_VERIFIER)
 
     @property
     def cors_origins_list(self) -> list[str]:

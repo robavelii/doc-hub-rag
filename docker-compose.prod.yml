@@ -124,6 +124,30 @@ services:
     restart: unless-stopped
     networks: [internal, app]
 
+  # Enterprise SSO (SAML/OIDC) + SCIM. Optional: the API works without it.
+  # Expose it to browsers at POLIS_PUBLIC_URL (e.g. https://sso.example.com via the host nginx).
+  polis:
+    image: boxyhq/jackson:26.2.0
+    container_name: doc_hub_polis
+    profiles: ["sso"]
+    environment:
+      DB_ENGINE: sql
+      DB_TYPE: postgres
+      DB_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/polis
+      API_KEYS: ${POLIS_API_KEY}
+      CLIENT_SECRET_VERIFIER: ${POLIS_CLIENT_SECRET_VERIFIER}
+      EXTERNAL_URL: ${POLIS_PUBLIC_URL}
+      NEXTAUTH_URL: ${POLIS_PUBLIC_URL}
+      NEXTAUTH_SECRET: ${POLIS_NEXTAUTH_SECRET}
+      DB_ENCRYPTION_KEY: ${POLIS_DB_ENCRYPTION_KEY}
+    ports:
+      - "127.0.0.1:5225:5225"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [internal]
+
   celery_worker:
     build: ./backend
     container_name: doc_hub_celery_worker

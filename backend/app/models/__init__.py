@@ -11,6 +11,7 @@ from app.models.invite_token import InviteToken
 from app.models.password_reset_token import PasswordResetToken
 from app.models.query_log import QueryLog
 from app.models.refresh_token import RefreshToken
+from app.models.sso_domain import SsoDomain
 from app.models.stripe_webhook_event import StripeWebhookEvent
 from app.models.subscription import Subscription
 from app.models.tenant import Tenant
@@ -18,6 +19,7 @@ from app.models.usage_event import UsageEvent
 from app.models.user import User
 
 __all__ = [
+    "SsoDomain",
     "Collection",
     "CollectionAccess",
     "Group",

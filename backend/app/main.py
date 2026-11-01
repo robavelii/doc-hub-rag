@@ -24,6 +24,7 @@ from app.routers import (
     feedback,
     integrations,
     query,
+    sso,
     usage,
     widget,
 )
@@ -83,6 +84,7 @@ app.include_router(feedback.router)
 app.include_router(api_keys.router)
 app.include_router(billing.router)
 app.include_router(access.router)
+app.include_router(sso.router)
 
 
 async def _check_postgres() -> dict:

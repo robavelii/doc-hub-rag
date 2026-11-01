@@ -319,6 +319,16 @@ Documents live in **General** (whole tenant) or a **collection**. A collection i
 
 The same scope filters retrieval, document list/read and the answer cache key. `POST /query` accepts `collection_ids` (and `"general"`) to search within a subset; it can only narrow. Restricted collections cannot be deleted while they contain documents.
 
+### Single sign-on and SCIM (Ory Polis)
+
+Customers sign in with their own identity provider (Okta, Entra ID, Google Workspace, any SAML 2.0 or OIDC IdP) through a self-hosted [Ory Polis](https://github.com/ory/polis) (Apache-2.0), and can provision users and groups over SCIM 2.0.
+
+1. Run Polis: `docker compose -f docker-compose.prod.yml --profile sso up -d polis` (create a `polis` database first) and set the `POLIS_*` variables in `.env` (see `.env.example`). Expose Polis to browsers at `POLIS_PUBLIC_URL`.
+2. Owner, in **Settings → SSO**: connect the IdP (metadata URL; the page shows the callback URL to configure), claim email domains, optionally require SSO, and create a SCIM endpoint.
+3. Users choose **Continue with SSO** on the login page. First-time users are created as members (just-in-time provisioning).
+
+Rules: a domain belongs to one workspace; public email domains cannot be claimed; the IdP can only sign in addresses on claimed domains and never an account in another workspace; owners keep password login when SSO is enforced; SCIM can deactivate members but never the owner. SCIM groups appear in Settings → Access and can be granted restricted collections. Webhooks are verified (HMAC-SHA256, 5-minute replay window).
+
 ### Roles and privacy
 
 - Conversations are private to the user who created them (owners cannot read members' chats).

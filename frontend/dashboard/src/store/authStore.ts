@@ -13,6 +13,7 @@ interface AuthState {
   setWidgetKey: (key: string) => void
   login: (email: string, password: string, remember?: boolean) => Promise<void>
   register: (tenantName: string, email: string, password: string) => Promise<{ api_key?: string }>
+  loginWithTokens: (accessToken: string, refreshToken: string | null) => void
   logout: () => void
 }
 
@@ -80,6 +81,20 @@ export const useAuthStore = create<AuthState>()(
           user: (data.user as UserSummary) ?? { id: '', email, role: 'owner', is_superadmin: false },
         })
         return { api_key: data.api_key as string | undefined }
+      },
+
+      // Single sign-on: the API redirects back with tokens in the URL fragment.
+      loginWithTokens: (accessToken, refreshToken) => {
+        localStorage.setItem('access_token', accessToken)
+        if (refreshToken) localStorage.setItem('refresh_token', refreshToken)
+        api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+        const payload = decodeJwtPayload(accessToken)
+        set({
+          accessToken,
+          refreshToken,
+          user: { id: payload.sub, email: '', role: payload.role as UserSummary['role'], is_superadmin: payload.is_superadmin },
+          tenant: { id: payload.tenant_id, name: '', slug: '' },
+        })
       },
 
       logout: () => {
