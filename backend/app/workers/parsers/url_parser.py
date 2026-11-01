@@ -1,11 +1,11 @@
 import httpx
-import trafilatura
-from bs4 import BeautifulSoup
 
 from app.utils.url_safety import MAX_REDIRECTS, UnsafeUrlError, validate_url_for_fetch
+from app.workers.parsers.sections import Section, sections_to_text
+from app.workers.parsers.web_parsers import html_to_sections
 
 
-def parse_url(url: str) -> str:
+def fetch_url_html(url: str) -> str:
     safe_url = validate_url_for_fetch(url)
 
     with httpx.Client(timeout=30, follow_redirects=False) as client:
@@ -27,10 +27,12 @@ def parse_url(url: str) -> str:
         else:
             raise UnsafeUrlError("Too many redirects")
 
-    text = trafilatura.extract(html, include_comments=False, include_tables=True)
-    if not text:
-        soup = BeautifulSoup(html, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer"]):
-            tag.decompose()
-        text = soup.get_text(separator="\n")
-    return text or ""
+    return html
+
+
+def parse_url_sections(url: str) -> list[Section]:
+    return html_to_sections(fetch_url_html(url))
+
+
+def parse_url(url: str) -> str:
+    return sections_to_text(parse_url_sections(url))

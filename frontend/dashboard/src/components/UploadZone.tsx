@@ -88,6 +88,12 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
     accept: {
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'text/csv': ['.csv'],
+      'text/markdown': ['.md', '.markdown'],
+      'text/html': ['.html', '.htm'],
+      'message/rfc822': ['.eml'],
       'text/plain': ['.txt'],
     },
     maxSize: 50 * 1024 * 1024,
@@ -133,7 +139,7 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
       >
         <input {...getInputProps()} />
         <Upload size={32} className="mx-auto mb-3 text-muted" />
-        <p className="text-sm">Drop PDF, DOCX, or TXT files here, or click to select</p>
+        <p className="text-sm">Drop PDF, Word, PowerPoint, Excel, CSV, Markdown, HTML, email or text files here, or click to select</p>
         <p className="text-xs text-muted mt-1">Max 50MB per file</p>
       </div>
       {uploads.length > 0 && (

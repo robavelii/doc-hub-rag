@@ -85,7 +85,10 @@ def setup_tenant() -> tuple[str, list[str]]:
                     status="pending",
                 )
             )
-        result = ingest_notion_page.apply(args=[str(doc_id), str(tenant_id), path.read_text(), path.name])
+        fmt = "md" if path.suffix == ".md" else "txt"
+        result = ingest_notion_page.apply(
+            args=[str(doc_id), str(tenant_id), path.read_text(), path.name], kwargs={"fmt": fmt}
+        )
         if result.failed():
             raise RuntimeError(f"ingestion failed for {path}: {result.result!r}")
         doc_ids.append(str(doc_id))

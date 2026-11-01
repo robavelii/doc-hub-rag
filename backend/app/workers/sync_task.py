@@ -20,6 +20,9 @@ MAX_BLOCK_DEPTH = 5  # nested toggles/columns/lists; deeper content is rare and 
 MAX_PAGES_PER_SYNC = 2000
 
 
+_HEADING_LEVELS = {"heading_1": 2, "heading_2": 3, "heading_3": 4}  # page title is level 1
+
+
 def _rich_text(content: dict) -> str:
     return "".join(r.get("plain_text", "") for r in content.get("rich_text", []))
 
@@ -33,6 +36,10 @@ def extract_notion_text(blocks: list) -> str:
             block_type = block.get("type", "")
             content = block.get(block_type, {}) or {}
             text = _rich_text(content)
+            if block_type in _HEADING_LEVELS and text.strip():
+                lines.append("#" * _HEADING_LEVELS[block_type] + " " + text.strip())
+                walk(block.get("_children", []), depth + 1)
+                continue
             if block_type == "child_page":
                 text = content.get("title", "")
             elif block_type == "table_row":
@@ -148,7 +155,7 @@ def sync_notion(tenant_id: str):
                     db.add(doc)
                     doc_id = doc.id
                 db.commit()
-                ingest_notion_page.delay(str(doc_id), tenant_id, text, title, last_edited)
+                ingest_notion_page.delay(str(doc_id), tenant_id, f"# {title}\n\n{text}", title, last_edited, fmt="md")
 
 
 @celery.task

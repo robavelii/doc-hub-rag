@@ -13,7 +13,9 @@ import type { UsageSummary } from '@shared/types'
 type ViewMode = 'list' | 'grid'
 type SortKey = 'filename' | 'created_at' | 'status' | 'size_bytes'
 
-const FILE_ICONS: Record<string, string> = { pdf: '📕', docx: '📘', txt: '📄', url: '🔗' }
+const FILE_ICONS: Record<string, string> = {
+  pdf: '📕', docx: '📘', pptx: '📙', xlsx: '📗', csv: '📗', md: '📝', html: '🌐', eml: '✉️', txt: '📄', url: '🔗',
+}
 
 export default function Documents() {
   const [docs, setDocs] = useState<DocumentItem[]>([])
