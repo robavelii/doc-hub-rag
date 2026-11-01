@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ApiKeyItem, BillingSubscription, TeamMember } from '@shared/types'
+import type { ApiKeyItem, BillingSubscription, CollectionItem, GroupItem, TeamMember } from '@shared/types'
 import api from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import { useSearchParams } from 'react-router-dom'
@@ -7,11 +7,12 @@ import { Button, Card, Input, Skeleton, useToast } from '../components/ui'
 import UsageBar from '../components/UsageBar'
 import { cn } from '../lib/cn'
 
-type Tab = 'profile' | 'team' | 'keys' | 'billing' | 'danger'
+type Tab = 'profile' | 'team' | 'access' | 'keys' | 'billing' | 'danger'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'team', label: 'Team' },
+  { id: 'access', label: 'Access' },
   { id: 'keys', label: 'API Keys' },
   { id: 'billing', label: 'Billing' },
   { id: 'danger', label: 'Danger Zone' },
@@ -23,12 +24,13 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>(initialTab && TABS.some((t) => t.id === initialTab) ? initialTab : 'profile')
   const { user, tenant } = useAuthStore()
   const { toast } = useToast()
+  const visibleTabs = TABS.filter((t) => t.id !== 'access' || user?.role !== 'member')
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
       <div className="flex gap-1 mb-6 border-b border-border overflow-x-auto">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -43,6 +45,7 @@ export default function Settings() {
       </div>
       {tab === 'profile' && <ProfileTab user={user} toast={toast} />}
       {tab === 'team' && <TeamTab toast={toast} />}
+      {tab === 'access' && <AccessTab toast={toast} />}
       {tab === 'keys' && <ApiKeysTab toast={toast} />}
       {tab === 'billing' && <BillingTab toast={toast} />}
       {tab === 'danger' && <DangerTab tenant={tenant} toast={toast} />}
@@ -122,6 +125,134 @@ function TeamTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
       </div>
       {inviteToken && <p className="mt-2 text-xs text-muted font-mono">Token: {inviteToken}</p>}
     </Card>
+  )
+}
+
+function errorDetail(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown; error?: unknown } } })?.response?.data
+  const value = detail?.detail ?? detail?.error
+  return typeof value === 'string' ? value : fallback
+}
+
+function AccessTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
+  const [collections, setCollections] = useState<CollectionItem[]>([])
+  const [groups, setGroups] = useState<GroupItem[]>([])
+  const [newCollection, setNewCollection] = useState('')
+  const [newGroup, setNewGroup] = useState('')
+  const [memberEmail, setMemberEmail] = useState<Record<string, string>>({})
+
+  const load = () => {
+    void api.get<CollectionItem[]>('/collections').then(({ data }) => setCollections(data))
+    void api.get<GroupItem[]>('/groups').then(({ data }) => setGroups(data)).catch(() => setGroups([]))
+  }
+  useEffect(() => { load() }, [])
+
+  const run = async (action: () => Promise<unknown>, success: string) => {
+    try {
+      await action()
+      toast('success', success)
+      load()
+    } catch (err) {
+      toast('error', errorDetail(err, 'That did not work'))
+    }
+  }
+
+  const toggleGroup = (c: CollectionItem, groupId: string) => {
+    const current = new Set(c.group_ids ?? [])
+    if (current.has(groupId)) current.delete(groupId)
+    else current.add(groupId)
+    void run(() => api.patch(`/collections/${c.id}`, { group_ids: [...current] }), 'Access updated')
+  }
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <Card className="p-6">
+        <h3 className="font-semibold mb-1">Collections</h3>
+        <p className="text-xs text-muted mb-4">
+          Documents outside a collection are in General and visible to everyone. Restricted collections are visible
+          only to owners, admins and the groups you tick.
+        </p>
+        <div className="flex gap-2 mb-4">
+          <Input id="new-collection" placeholder="e.g. HR policies" value={newCollection} onChange={(e) => setNewCollection(e.target.value)} />
+          <Button onClick={() => void run(async () => { await api.post('/collections', { name: newCollection, visibility: 'restricted' }); setNewCollection('') }, 'Collection created')} disabled={!newCollection.trim()}>
+            Create
+          </Button>
+        </div>
+        {collections.map((c) => (
+          <div key={c.id} className="py-3 border-b border-border-subtle">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">{c.name}</p>
+                <p className="text-xs text-muted">{c.document_count} document(s)</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  aria-label={`Visibility of ${c.name}`}
+                  value={c.visibility}
+                  onChange={(e) => void run(() => api.patch(`/collections/${c.id}`, { visibility: e.target.value }), 'Visibility updated')}
+                  className="rounded-lg border border-border bg-surface px-2 py-1 text-sm"
+                >
+                  <option value="tenant">Everyone</option>
+                  <option value="restricted">Selected groups</option>
+                </select>
+                <Button variant="danger" size="sm" onClick={() => void run(() => api.delete(`/collections/${c.id}`), 'Collection deleted')}>
+                  Delete
+                </Button>
+              </div>
+            </div>
+            {c.visibility === 'restricted' && (
+              <div className="flex flex-wrap gap-3 mt-2">
+                {groups.length === 0 && <p className="text-xs text-muted">Create a group below to grant access.</p>}
+                {groups.map((g) => (
+                  <label key={g.id} className="flex items-center gap-1 text-xs">
+                    <input type="checkbox" checked={(c.group_ids ?? []).includes(g.id)} onChange={() => toggleGroup(c, g.id)} />
+                    {g.name}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="font-semibold mb-4">Groups</h3>
+        <div className="flex gap-2 mb-4">
+          <Input id="new-group" placeholder="e.g. HR team" value={newGroup} onChange={(e) => setNewGroup(e.target.value)} />
+          <Button onClick={() => void run(async () => { await api.post('/groups', { name: newGroup }); setNewGroup('') }, 'Group created')} disabled={!newGroup.trim()}>
+            Create
+          </Button>
+        </div>
+        {groups.map((g) => (
+          <div key={g.id} className="py-3 border-b border-border-subtle">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">
+                {g.name} {g.source === 'scim' && <span className="text-xs text-muted">· synced from your identity provider</span>}
+              </p>
+              {g.source !== 'scim' && (
+                <Button variant="danger" size="sm" onClick={() => void run(() => api.delete(`/groups/${g.id}`), 'Group deleted')}>Delete</Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {g.members.map((m) => (
+                <span key={m.id} className="text-xs rounded-full border border-border px-2 py-0.5">
+                  {m.email}
+                  {g.source !== 'scim' && (
+                    <button className="ml-1 text-muted" aria-label={`Remove ${m.email}`} onClick={() => void run(() => api.delete(`/groups/${g.id}/members/${m.id}`), 'Member removed')}>×</button>
+                  )}
+                </span>
+              ))}
+            </div>
+            {g.source !== 'scim' && (
+              <div className="flex gap-2 mt-2">
+                <Input id={`member-${g.id}`} placeholder="teammate@company.com" value={memberEmail[g.id] ?? ''} onChange={(e) => setMemberEmail({ ...memberEmail, [g.id]: e.target.value })} />
+                <Button size="sm" onClick={() => void run(async () => { await api.post(`/groups/${g.id}/members`, { email: memberEmail[g.id] }); setMemberEmail({ ...memberEmail, [g.id]: '' }) }, 'Member added')}>Add</Button>
+              </div>
+            )}
+          </div>
+        ))}
+      </Card>
+    </div>
   )
 }
 

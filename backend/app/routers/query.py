@@ -11,6 +11,7 @@ from app.dependencies import KIND_PUBLISHABLE_KEY, Principal, get_query_principa
 from app.middleware.rate_limiter import rate_limit
 from app.models.conversation import ConversationMessage
 from app.routers.conversations import get_owned_conversation, persist_conversation_messages
+from app.services.access import resolve_scope
 from app.services.query_service import complete_rag_query, run_rag_query, stream_rag_query
 from app.services.usage_service import check_query_limit
 
@@ -22,6 +23,8 @@ HISTORY_MESSAGE_LIMIT = 20
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = None
+    # Optional filter: collection ids (and/or "general") to search within, never wider than allowed.
+    collection_ids: list[str] | None = Field(default=None, max_length=50)
 
 
 def _keeps_conversations(principal: Principal) -> bool:
@@ -69,7 +72,8 @@ async def query(
     tenant = principal.tenant
     await check_query_limit(tenant, db)
     history = await _load_conversation_history(db, principal, body.conversation_id)
-    context = await run_rag_query(body.question, str(tenant.id), db, history)
+    scope = (await resolve_scope(db, principal)).narrow(body.collection_ids)
+    context = await run_rag_query(body.question, str(tenant.id), db, history, scope=scope)
     result = await complete_rag_query(context, str(tenant.id), db)
 
     convo_id = None
@@ -98,10 +102,11 @@ async def query_stream(
     tenant = principal.tenant
     await check_query_limit(tenant, db)
     history = await _load_conversation_history(db, principal, body.conversation_id)
+    scope = (await resolve_scope(db, principal)).narrow(body.collection_ids)
 
     async def event_generator():
         full_answer = ""
-        async for chunk in stream_rag_query(body.question, str(tenant.id), db, history):
+        async for chunk in stream_rag_query(body.question, str(tenant.id), db, history, scope=scope):
             if not chunk.startswith("data: "):
                 yield chunk
                 continue

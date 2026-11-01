@@ -1,3 +1,4 @@
+import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_tenant, require_owner
+from app.models.access import Collection
 from app.models.api_key import ApiKey
 from app.models.tenant import Tenant
 from app.services.audit_service import log_audit
@@ -24,6 +26,8 @@ class CreateApiKeyRequest(BaseModel):
     name: str = "Default"
     # "publishable" keys can only ask questions and are meant for the embeddable widget.
     kind: Literal["secret", "publishable"] = API_KEY_KIND_SECRET
+    # Publishable keys only: answer exclusively from this collection.
+    collection_id: str | None = None
 
 
 def _masked(key: ApiKey) -> str:
@@ -58,6 +62,7 @@ async def list_api_keys(
             "key_prefix": k.key_prefix,
             "masked_key": _masked(k),
             "kind": k.kind,
+            "collection_id": str(k.collection_id) if k.collection_id else None,
             "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
             "created_at": k.created_at.isoformat() if k.created_at else None,
         }
@@ -72,6 +77,17 @@ async def create_api_key(
     tenant: Tenant = Depends(require_owner),
     db: AsyncSession = Depends(get_db),
 ):
+    collection_id = None
+    if body.collection_id:
+        if body.kind != "publishable":
+            raise HTTPException(status_code=422, detail="Only widget (publishable) keys can be scoped to a collection")
+        try:
+            collection = await db.get(Collection, uuid.UUID(body.collection_id))
+        except ValueError:
+            collection = None
+        if not collection or collection.tenant_id != tenant.id:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        collection_id = collection.id
     raw_key = generate_api_key(body.kind)
     key = ApiKey(
         tenant_id=tenant.id,
@@ -79,6 +95,7 @@ async def create_api_key(
         key_prefix=api_key_prefix(raw_key),
         key_hash=hash_api_key(raw_key),
         kind=body.kind,
+        collection_id=collection_id,
     )
     db.add(key)
     await db.commit()

@@ -1,3 +1,4 @@
+from app.models.access import Collection, CollectionAccess, Group, GroupMember
 from app.models.api_key import ApiKey
 from app.models.audit_log import AuditLog
 from app.models.chunk import Chunk
@@ -17,6 +18,10 @@ from app.models.usage_event import UsageEvent
 from app.models.user import User
 
 __all__ = [
+    "Collection",
+    "CollectionAccess",
+    "Group",
+    "GroupMember",
     "Tenant",
     "User",
     "Document",

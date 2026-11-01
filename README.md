@@ -306,6 +306,19 @@ pytest tests/e2e/test_local_model.py -m local -v
 
 Registration returns one of each (`api_key`, `widget_key`). Create more in **Settings → API keys** or **Widget**. Keys are stored as SHA-256 hashes; legacy bcrypt-hashed keys keep working and are re-hashed on first use.
 
+### Collections and groups
+
+Documents live in **General** (whole tenant) or a **collection**. A collection is visible to everyone or **restricted** to selected groups (Settings → Access).
+
+| Caller | Sees |
+|---|---|
+| Owner / admin, secret key | Everything |
+| Member | General + "everyone" collections + restricted collections granted to their groups |
+| Widget key scoped to a collection | Only that collection |
+| Widget key, unscoped | General + "everyone" collections |
+
+The same scope filters retrieval, document list/read and the answer cache key. `POST /query` accepts `collection_ids` (and `"general"`) to search within a subset; it can only narrow. Restricted collections cannot be deleted while they contain documents.
+
 ### Roles and privacy
 
 - Conversations are private to the user who created them (owners cannot read members' chats).

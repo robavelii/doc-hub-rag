@@ -22,6 +22,8 @@ class Document(Base):
     error_message = Column(Text)
     source_url = Column(Text)
     integration = Column(String)
+    # NULL = "General": visible to everyone in the tenant.
+    collection_id = Column(UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL"), index=True)
     metadata_ = Column("metadata", JSONB, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

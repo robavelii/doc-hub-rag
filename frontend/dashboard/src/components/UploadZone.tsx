@@ -1,7 +1,7 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Upload } from 'lucide-react'
-import type { DocumentItem, DocumentUploadResponse, UploadProgress } from '@shared/types'
+import type { CollectionItem, DocumentItem, DocumentUploadResponse, UploadProgress } from '@shared/types'
 import api from '../lib/api'
 import { Badge } from './ui'
 import { cn } from '../lib/cn'
@@ -22,6 +22,12 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
   const [uploads, setUploads] = useState<UploadProgress[]>([])
   const [url, setUrl] = useState('')
   const [urlLoading, setUrlLoading] = useState(false)
+  const [collections, setCollections] = useState<CollectionItem[]>([])
+  const [collectionId, setCollectionId] = useState('')
+
+  useEffect(() => {
+    void api.get<CollectionItem[]>('/collections').then(({ data }) => setCollections(data)).catch(() => setCollections([]))
+  }, [])
 
   const pollStatus = useCallback(
     async (_uploadId: string, docId: string) => {
@@ -59,6 +65,7 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
         setUploads((prev) => [...prev, { id, name: file.name, status: 'uploading' }])
         const form = new FormData()
         form.append('file', file)
+        if (collectionId) form.append('collection_id', collectionId)
         try {
           const { data } = await api.post<DocumentUploadResponse>('/documents', form, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -80,7 +87,7 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
         }
       }
     },
-    [pollStatus]
+    [pollStatus, collectionId]
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -103,7 +110,10 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
     if (!url.trim()) return
     setUrlLoading(true)
     try {
-      const { data } = await api.post<DocumentUploadResponse>('/documents/url', { url: url.trim() })
+      const { data } = await api.post<DocumentUploadResponse>('/documents/url', {
+        url: url.trim(),
+        collection_id: collectionId || null,
+      })
       setUploads((prev) => [...prev, { id: data.id, name: url, status: 'processing', docId: data.id }])
       void pollStatus(data.id, data.id)
       setUrl('')
@@ -114,6 +124,24 @@ export default function UploadZone({ onUploadComplete }: UploadZoneProps) {
 
   return (
     <div>
+      {collections.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 text-sm">
+          <label htmlFor="upload-collection" className="text-muted">Add to collection</label>
+          <select
+            id="upload-collection"
+            value={collectionId}
+            onChange={(e) => setCollectionId(e.target.value)}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm"
+          >
+            <option value="">General (everyone)</option>
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}{c.visibility === 'restricted' ? ' (restricted)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="flex gap-2 mb-4">
         <input
           type="url"

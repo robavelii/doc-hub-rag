@@ -188,6 +188,22 @@ export interface TeamMember {
   created_at?: string | null
 }
 
+export interface CollectionItem {
+  id: string
+  name: string
+  description?: string | null
+  visibility: 'tenant' | 'restricted'
+  document_count: number
+  group_ids?: string[]
+}
+
+export interface GroupItem {
+  id: string
+  name: string
+  source: 'manual' | 'scim'
+  members: { id: string; email: string }[]
+}
+
 export interface ApiKeyItem {
   id: string
   name: string

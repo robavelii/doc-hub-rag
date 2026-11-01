@@ -14,6 +14,7 @@ from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.routers import (
+    access,
     admin,
     api_keys,
     auth,
@@ -81,6 +82,7 @@ app.include_router(conversations.router)
 app.include_router(feedback.router)
 app.include_router(api_keys.router)
 app.include_router(billing.router)
+app.include_router(access.router)
 
 
 async def _check_postgres() -> dict:

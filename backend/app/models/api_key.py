@@ -16,6 +16,8 @@ class ApiKey(Base):
     key_hash = Column(String, nullable=False, unique=True)
     # "secret" = full tenant API for server-side use; "publishable" = query-only, safe in a web page.
     kind = Column(String, nullable=False, default="secret", server_default="secret")
+    # Publishable keys only: answer from this collection (+ General) instead of all tenant-visible ones.
+    collection_id = Column(UUID(as_uuid=True), ForeignKey("collections.id", ondelete="CASCADE"), nullable=True)
     last_used_at = Column(DateTime(timezone=True))
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

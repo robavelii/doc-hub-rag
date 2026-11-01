@@ -30,6 +30,8 @@ class Chunk(Base):
     text = Column(Text, nullable=False)
     text_preview = Column(String(500), nullable=False, default="")
     filename = Column(String, nullable=False, default="")
+    # Denormalised from documents.collection_id so retrieval can filter without a join.
+    collection_id = Column(UUID(as_uuid=True), ForeignKey("collections.id", ondelete="SET NULL"), index=True)
     embedding = Column(Vector(settings.EMBEDDING_DIMENSIONS))
     # Full-text index over filename + text, maintained by Postgres.
     search_vector = Column(
