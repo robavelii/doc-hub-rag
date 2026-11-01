@@ -1,0 +1,25 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "ASYNC", "RUF100"]
+ignore = [
+    "E501",   # long lines are handled by review, not CI
+    "B008",   # FastAPI Depends()/File() in defaults is the framework idiom
+    "S101",   # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"scripts/**" = ["S"]
+# Dev-only defaults; app/utils/production_guard.py refuses to boot with them in production.
+"app/config.py" = ["S105"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+skip_empty = true

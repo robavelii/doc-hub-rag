@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator, List
+from collections.abc import AsyncIterator
 
 
 class AIProvider(ABC):
     @abstractmethod
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         pass
 
     @abstractmethod
-    async def embed_single(self, text: str) -> List[float]:
+    async def embed_single(self, text: str) -> list[float]:
         pass
 
     @abstractmethod

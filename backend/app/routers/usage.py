@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Date, cast, func, select
@@ -83,7 +83,7 @@ async def usage_timeseries(
     range: str = Query("7d", pattern="^(7d|30d|90d)$"),
 ):
     days = {"7d": 7, "30d": 30, "90d": 90}[range]
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = datetime.now(UTC) - timedelta(days=days)
 
     token_result = await db.execute(
         select(cast(UsageEvent.occurred_at, Date).label("day"), func.sum(UsageEvent.tokens))

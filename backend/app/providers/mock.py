@@ -1,7 +1,7 @@
 import hashlib
 import math
 import re
-from typing import AsyncIterator, List, Tuple
+from collections.abc import AsyncIterator
 
 from app.config import settings
 from app.providers.base import AIProvider
@@ -23,7 +23,7 @@ class MockProvider(AIProvider):
     def embed_model_name(self) -> str:
         return f"mock-{settings.EMBEDDING_DIMENSIONS}d"
 
-    def _deterministic_embedding(self, text: str) -> List[float]:
+    def _deterministic_embedding(self, text: str) -> list[float]:
         dim = settings.EMBEDDING_DIMENSIONS
         digest = hashlib.sha256(text.encode()).digest()
         values = []
@@ -33,13 +33,13 @@ class MockProvider(AIProvider):
         norm = math.sqrt(sum(v * v for v in values)) or 1.0
         return [v / norm for v in values]
 
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         return [self._deterministic_embedding(t) for t in texts]
 
-    async def embed_single(self, text: str) -> List[float]:
+    async def embed_single(self, text: str) -> list[float]:
         return self._deterministic_embedding(text)
 
-    def _parse_context_chunks(self, context: str) -> List[Tuple[str, str, str]]:
+    def _parse_context_chunks(self, context: str) -> list[tuple[str, str, str]]:
         return [(m.group(1), m.group(2), m.group(3).strip()) for m in _CHUNK_RE.finditer(context)]
 
     _STOPWORDS = frozenset(
@@ -50,7 +50,7 @@ class MockProvider(AIProvider):
         }
     )
 
-    def _select_chunks(self, chunks: List[Tuple[str, str, str]], question: str) -> List[Tuple[str, str, str]]:
+    def _select_chunks(self, chunks: list[tuple[str, str, str]], question: str) -> list[tuple[str, str, str]]:
         terms = []
         for word in re.findall(r"[a-z0-9']+", question.lower()):
             cleaned = re.sub(r"'s$", "", word.strip("'"))

@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
@@ -9,7 +8,6 @@ from app.database import get_db, set_tenant_rls
 from app.dependencies import require_superadmin
 from app.models.api_key import ApiKey
 from app.models.tenant import Tenant
-from app.models.usage_event import UsageEvent
 from app.models.user import User
 from app.services.audit_service import log_audit
 from app.services.auth_service import (

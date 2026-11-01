@@ -1,17 +1,17 @@
 import uuid
-from typing import Any, Dict, List
+from typing import Any
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chunk import Chunk
 
 
-def _format_vector(embedding: List[float]) -> str:
+def _format_vector(embedding: list[float]) -> str:
     return "[" + ",".join(str(x) for x in embedding) + "]"
 
 
-def _row_to_candidate(row, tenant_id: str, score: float) -> Dict[str, Any]:
+def _row_to_candidate(row, tenant_id: str, score: float) -> dict[str, Any]:
     full_text = row.text or row.text_preview or ""
     return {
         "id": str(row.id),
@@ -30,7 +30,7 @@ async def upsert_chunks(
     session: AsyncSession,
     tenant_id: str,
     document_id: str,
-    chunks: List[Dict[str, Any]],
+    chunks: list[dict[str, Any]],
 ) -> None:
     for item in chunks:
         chunk = Chunk(
@@ -47,7 +47,7 @@ async def upsert_chunks(
     await session.commit()
 
 
-def upsert_chunks_sync(session, tenant_id: str, document_id: str, chunks: List[Dict[str, Any]]) -> None:
+def upsert_chunks_sync(session, tenant_id: str, document_id: str, chunks: list[dict[str, Any]]) -> None:
     for item in chunks:
         chunk = Chunk(
             id=uuid.UUID(item["id"]) if isinstance(item["id"], str) else item["id"],
@@ -66,9 +66,9 @@ def upsert_chunks_sync(session, tenant_id: str, document_id: str, chunks: List[D
 async def search_vectors(
     session: AsyncSession,
     tenant_id: str,
-    embedding: List[float],
+    embedding: list[float],
     top_k: int = 40,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     query = text(
         """
         SELECT id, document_id, chunk_index, text, text_preview, filename,
@@ -93,9 +93,9 @@ async def search_vectors(
 async def search_chunks_by_keywords(
     session: AsyncSession,
     tenant_id: str,
-    terms: List[str],
+    terms: list[str],
     top_k: int = 20,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     if not terms:
         return []
 
@@ -107,6 +107,7 @@ async def search_chunks_by_keywords(
         params[key] = f"%{term}%"
 
     where_clause = " OR ".join(conditions)
+    # where_clause only contains generated bind-parameter names; values are bound.
     query = text(
         f"""
         SELECT id, document_id, chunk_index, text, text_preview, filename
@@ -114,13 +115,13 @@ async def search_chunks_by_keywords(
         WHERE tenant_id = CAST(:tenant_id AS uuid)
           AND ({where_clause})
         LIMIT :top_k
-        """
+        """  # noqa: S608
     )
     result = await session.execute(query, params)
     return [_row_to_candidate(row, tenant_id, 0.55) for row in result.fetchall()]
 
 
-def search_vectors_sync(session, tenant_id: str, embedding: List[float], top_k: int = 40) -> List[Dict[str, Any]]:
+def search_vectors_sync(session, tenant_id: str, embedding: list[float], top_k: int = 40) -> list[dict[str, Any]]:
     query = text(
         """
         SELECT id, document_id, chunk_index, text, text_preview, filename,

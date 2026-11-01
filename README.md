@@ -23,7 +23,7 @@ docker compose -f docker-compose.dev.yml up -d
 # 3. Backend setup
 cd backend
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 alembic upgrade head
 python scripts/seed.py
 uvicorn app.main:app --reload
@@ -301,6 +301,26 @@ cd frontend/admin && npm run typecheck
 ```
 
 ## Testing
+
+CI (`.github/workflows/ci.yml`) runs on every pull request and gates merges through a single `ci-ok` check:
+
+| Job | What it enforces |
+|-----|------------------|
+| backend · lint + dependency audit | ruff, lockfiles in sync with `requirements*.in`, `pip-audit` (no known CVEs) |
+| backend · unit + security tests | `tests/unit`, `tests/security` with coverage |
+| backend · migrations, integration + e2e | migrate an empty DB, `alembic check` (models match migrations), RLS tests as `app_user`, e2e with inline Celery. Missing services fail instead of skipping (`REQUIRE_SERVICES=1`) |
+| frontend · dashboard/landing/widget/admin | `npm ci`, typecheck, tests, build, `npm audit --audit-level=high` |
+| docker · backend/dashboard/landing/widget/admin | images build; backend image imports the app |
+
+### Dependencies
+
+Runtime deps live in `backend/requirements.in`, test/tooling deps in `backend/requirements-dev.in`. Both are compiled to fully pinned lockfiles:
+
+```bash
+cd backend
+uv pip compile requirements.in -o requirements.txt --python-version 3.11
+uv pip compile requirements-dev.in -o requirements-dev.txt --python-version 3.11
+```
 
 ### Prerequisites
 

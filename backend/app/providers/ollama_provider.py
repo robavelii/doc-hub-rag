@@ -1,4 +1,4 @@
-from typing import AsyncIterator, List
+from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI
 
@@ -23,14 +23,14 @@ class OllamaProvider(AIProvider):
     def embed_model_name(self) -> str:
         return self._embed_model
 
-    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         response = await self.client.embeddings.create(
             model=self._embed_model,
             input=texts,
         )
         return [item.embedding for item in response.data]
 
-    async def embed_single(self, text: str) -> List[float]:
+    async def embed_single(self, text: str) -> list[float]:
         embeddings = await self.embed_texts([text])
         return embeddings[0]
 

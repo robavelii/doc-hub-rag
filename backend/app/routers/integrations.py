@@ -18,7 +18,7 @@ from app.workers.sync_task import sync_notion
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 NOTION_AUTH_URL = "https://api.notion.com/v1/oauth/authorize"
-NOTION_TOKEN_URL = "https://api.notion.com/v1/oauth/token"
+NOTION_TOKEN_URL = "https://api.notion.com/v1/oauth/token"  # noqa: S105 - URL, not a secret
 
 
 @router.get("/notion/connect")

@@ -1,5 +1,7 @@
+
 """RLS regression tests — require Postgres with app_user role (migration 004)."""
 
+import os
 import uuid
 
 import pytest
@@ -10,7 +12,6 @@ from app.database import (
     AdminSyncSession,
     AsyncSessionLocal,
     SyncSession,
-    bind_tenant,
     set_tenant_rls,
     set_tenant_rls_sync,
 )
@@ -32,13 +33,13 @@ def postgres_available():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
-        pytest.skip("Integration tests require Postgres")
+        pytest.fail("Integration tests require Postgres") if os.environ.get("REQUIRE_SERVICES") == "1" else pytest.skip("Integration tests require Postgres")
 
 
 @pytest.fixture(scope="session")
 def app_user_available(postgres_available):
     if "app_user" not in settings.DATABASE_SYNC_URL:
-        pytest.skip("RLS tests require DATABASE_SYNC_URL with app_user")
+        pytest.fail("RLS tests require DATABASE_SYNC_URL with app_user") if os.environ.get("REQUIRE_SERVICES") == "1" else pytest.skip("RLS tests require DATABASE_SYNC_URL with app_user")
 
 
 def _create_tenant() -> uuid.UUID:

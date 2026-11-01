@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -115,7 +115,7 @@ async def update_conversation(
     if not convo or str(convo.tenant_id) != str(tenant.id):
         raise HTTPException(status_code=404, detail="Conversation not found")
     convo.title = body.title.strip()[:120] or "New conversation"
-    convo.updated_at = datetime.now(timezone.utc)
+    convo.updated_at = datetime.now(UTC)
     await db.commit()
     return {
         "id": str(convo.id),
@@ -165,7 +165,7 @@ async def persist_conversation_messages(
             )
             if (count_result.scalar() or 0) == 0:
                 convo.title = _auto_title(question)
-            convo.updated_at = datetime.now(timezone.utc)
+            convo.updated_at = datetime.now(UTC)
         else:
             convo = Conversation(tenant_id=uuid.UUID(tenant_id), title=_auto_title(question))
             db.add(convo)

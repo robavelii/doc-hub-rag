@@ -6,6 +6,7 @@ from app.database import admin_engine, engine
 from app.main import app
 from app.middleware import rate_limiter
 from app.providers.factory import get_ai_provider
+from app.services import cache_service
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -31,6 +32,12 @@ async def _reset_shared_async_state():
         except Exception:
             pass
         rate_limiter._redis = None
+    if cache_service._redis_client is not None:
+        try:
+            await cache_service._redis_client.aclose()
+        except Exception:
+            pass
+        cache_service._redis_client = None
     get_ai_provider.cache_clear()  # AsyncOpenAI clients are loop-bound too
     await engine.dispose()
     await admin_engine.dispose()

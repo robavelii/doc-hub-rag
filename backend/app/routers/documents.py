@@ -10,11 +10,11 @@ from app.dependencies import get_current_tenant
 from app.middleware.rate_limiter import rate_limit
 from app.models.chunk import Chunk
 from app.models.document import Document
-from app.utils.file_validation import detect_file_type, sanitize_filename
 from app.models.tenant import Tenant
 from app.services.storage_service import build_s3_key, delete_from_s3, upload_to_s3
 from app.services.usage_service import check_storage_limit, record_storage_usage
 from app.services.vector_service import delete_doc_vectors
+from app.utils.file_validation import detect_file_type, sanitize_filename
 from app.utils.url_safety import UnsafeUrlError, validate_url_for_fetch
 from app.workers.ingest_task import ingest_document
 

@@ -1,0 +1,34 @@
+# Top-level runtime dependencies. Edit this file, then regenerate the lock:
+#   uv pip compile requirements.in -o requirements.txt --python-version 3.11
+fastapi
+uvicorn[standard]
+gunicorn
+pydantic[email]
+pydantic-settings
+sqlalchemy[asyncio]
+asyncpg
+psycopg[binary]
+alembic
+pgvector
+pyjwt
+bcrypt
+cryptography
+celery
+redis
+boto3
+openai
+tiktoken
+langchain-text-splitters
+PyMuPDF
+pdfplumber
+pytesseract
+Pillow
+python-docx
+beautifulsoup4
+trafilatura
+rank-bm25
+httpx
+python-multipart
+stripe
+prometheus-fastapi-instrumentator
+sentry-sdk

@@ -1,71 +1,78 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11" # must match backend/Dockerfile
+  NODE_VERSION: "20" # must match frontend Dockerfiles
 
 jobs:
-  backend-unit:
+  backend-lint:
+    name: backend · lint + dependency audit
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt
-      - name: Lint
-        working-directory: backend
-        run: pip install ruff && ruff check app tests --ignore E501
-      - name: Run unit tests
-        working-directory: backend
-        run: pytest tests/unit tests/security -q
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Ruff
+        run: ruff check app tests scripts --output-format=github
+      - name: Lockfiles are in sync with .in files
+        # Re-resolve using the committed pins as preferences: only an edit to a
+        # .in file (without regenerating the lock) produces a diff.
+        run: |
+          pip install uv
+          for f in requirements requirements-dev; do
+            cp $f.txt /tmp/$f.txt
+            uv pip compile $f.in -o /tmp/$f.txt --python-version 3.11 -q
+            diff <(grep -v '^\s*#' $f.txt) <(grep -v '^\s*#' /tmp/$f.txt) \
+              || { echo "::error::$f.txt is stale. Run: uv pip compile $f.in -o $f.txt --python-version 3.11"; exit 1; }
+          done
+      - name: Known vulnerabilities (runtime deps)
+        run: pip-audit -r requirements.txt --progress-spinner off --strict
 
-  backend-integration:
+  backend-unit:
+    name: backend · unit + security tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_DB: ragdb
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt
-      - name: Run migrations
-        working-directory: backend
-        env:
-          DATABASE_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
-          DATABASE_APP_PASSWORD: app_user_dev_password
-        run: alembic upgrade head
-      - name: Run integration tests (RLS as app_user)
-        working-directory: backend
-        env:
-          DATABASE_URL: postgresql+asyncpg://app_user:app_user_dev_password@localhost:5432/ragdb
-          DATABASE_SYNC_URL: postgresql://app_user:app_user_dev_password@localhost:5432/ragdb
-          DATABASE_ADMIN_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
-          POSTGRES_PASSWORD: postgres
-          AI_PROVIDER: mock
-        run: pytest tests/integration -m integration -q --tb=short
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Unit + security tests
+        run: pytest tests/unit tests/security -q --cov --cov-report=term-missing:skip-covered --cov-report=xml:coverage-unit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-unit
+          path: backend/coverage-unit.xml
 
-  backend-e2e:
+  backend-services:
+    name: backend · migrations, integration (RLS) + e2e
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -77,82 +84,96 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports: ["9000:9000"]
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # App runs as the non-superuser app_user so RLS is actually enforced.
+      DATABASE_URL: postgresql+asyncpg://app_user:app_user_dev_password@localhost:5432/ragdb
+      DATABASE_SYNC_URL: postgresql://app_user:app_user_dev_password@localhost:5432/ragdb
+      DATABASE_ADMIN_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+      DATABASE_APP_PASSWORD: app_user_dev_password
+      POSTGRES_PASSWORD: postgres
+      REDIS_URL: redis://localhost:6379/0
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      AI_PROVIDER: mock
+      SUPERADMIN_PASSWORD: ci-superadmin-password
+      REQUIRE_SERVICES: "1" # missing services fail the job instead of skipping tests
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt
-      - name: Run migrations
-        working-directory: backend
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Start S3-compatible server (moto)
+        run: |
+          nohup moto_server -H 127.0.0.1 -p 9000 > /tmp/moto.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/ >/dev/null && break; sleep 1; done
+      - name: Migrate from empty database
+        run: alembic upgrade head
         env:
           DATABASE_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
-          DATABASE_APP_PASSWORD: app_user_dev_password
-        run: alembic upgrade head
-      - name: Run e2e tests
-        working-directory: backend
+      - name: Models match migrations (no drift)
+        run: alembic check
         env:
-          DATABASE_URL: postgresql+asyncpg://app_user:app_user_dev_password@localhost:5432/ragdb
-          DATABASE_SYNC_URL: postgresql://app_user:app_user_dev_password@localhost:5432/ragdb
-          DATABASE_ADMIN_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
-          POSTGRES_PASSWORD: postgres
-          REDIS_URL: redis://localhost:6379/0
-          S3_ENDPOINT: http://localhost:9000
-          S3_ACCESS_KEY: minioadmin
-          S3_SECRET_KEY: minioadmin
-          AI_PROVIDER: mock
-        run: pytest -m e2e -q --tb=short
+          DATABASE_SYNC_URL: postgresql://postgres:postgres@localhost:5432/ragdb
+      - name: Seed demo tenants and superadmin
+        run: python scripts/seed.py
+      - name: Integration tests (RLS enforced as app_user)
+        run: pytest tests/integration -m integration -q --tb=short --cov --cov-report=xml:coverage-integration.xml
+      - name: E2E tests
+        run: pytest -m e2e -q --tb=short --cov --cov-append --cov-report=term-missing:skip-covered --cov-report=xml:coverage-e2e.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-services
+          path: backend/coverage-*.xml
 
   frontend:
+    name: frontend · ${{ matrix.app }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        app: [dashboard, landing, widget]
+        app: [dashboard, landing, widget, admin]
+    defaults:
+      run:
+        working-directory: frontend/${{ matrix.app }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/${{ matrix.app }}/package-lock.json
-      - name: Install and build
-        working-directory: frontend/${{ matrix.app }}
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - name: Tests
         run: |
-          npm install
-          npm run typecheck
-          if [ "${{ matrix.app }}" = "dashboard" ]; then npm run test; fi
-          npm run build
+          if npm run | grep -qE '^\s+test$'; then npm test; else echo "no test script"; fi
+      - run: npm run build
+      - name: Known vulnerabilities (production deps, high+)
+        run: npm audit --omit=dev --audit-level=high
 
   docker-build:
-    if: github.ref == 'refs/heads/main'
+    name: docker · ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        target: [backend, dashboard, landing, widget]
+        target: [backend, dashboard, landing, widget, admin]
     steps:
       - uses: actions/checkout@v4
       - name: Build image
@@ -162,3 +183,18 @@ jobs:
           else
             docker build -f frontend/${{ matrix.target }}/Dockerfile -t doc-hub-${{ matrix.target }} ./frontend
           fi
+      - name: Backend image boots and imports the app
+        if: matrix.target == 'backend'
+        run: docker run --rm doc-hub-backend python -c "import app.main; print('ok')"
+
+  # Single required status check for branch protection.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [backend-lint, backend-unit, backend-services, frontend, docker-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -e 'to_entries | all(.value.result == "success")' \
+            || { echo "::error::One or more required jobs failed or were cancelled"; exit 1; }

@@ -1,0 +1,9 @@
+# Test and tooling dependencies (never installed in the production image).
+#   uv pip compile requirements-dev.in -o requirements-dev.txt --python-version 3.11
+-c requirements.txt
+pytest
+pytest-asyncio
+pytest-cov
+ruff
+pip-audit
+moto[server]

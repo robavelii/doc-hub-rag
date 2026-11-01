@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
@@ -108,7 +108,7 @@ async def get_current_tenant(
         )
         for key_row in key_result.scalars().all():
             if verify_api_key(api_key, key_row.key_hash):
-                key_row.last_used_at = datetime.now(timezone.utc)
+                key_row.last_used_at = datetime.now(UTC)
                 await db.commit()
                 break
 
