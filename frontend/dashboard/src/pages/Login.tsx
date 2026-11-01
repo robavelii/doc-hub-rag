@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import api from '../lib/api'
 import { Button, Card, Input, ThemeToggle, useToast } from '../components/ui'
 
 export default function Login() {
@@ -13,6 +14,23 @@ export default function Login() {
   const { login } = useAuthStore()
   const navigate = useNavigate()
   const { toast } = useToast()
+
+  const startSso = async () => {
+    if (!email.includes('@')) {
+      toast('error', 'Enter your work email first')
+      return
+    }
+    try {
+      const { data } = await api.get<{ sso: boolean }>('/auth/sso/discover', { params: { email } })
+      if (!data.sso) {
+        toast('error', 'Single sign-on is not set up for this email domain')
+        return
+      }
+      window.location.href = `${api.defaults.baseURL ?? ''}/auth/sso/start?email=${encodeURIComponent(email)}`
+    } catch {
+      toast('error', 'Could not reach the server')
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -136,6 +154,9 @@ export default function Login() {
 
               <Button type="submit" className="w-full" loading={loading} size="lg">
                 Sign in
+              </Button>
+              <Button type="button" variant="secondary" className="w-full" size="lg" onClick={() => void startSso()}>
+                Continue with SSO
               </Button>
             </form>
 

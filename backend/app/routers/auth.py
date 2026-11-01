@@ -97,7 +97,7 @@ def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-async def _issue_auth_response(db: AsyncSession, user: User, tenant: Tenant) -> dict:
+async def issue_auth_response(db: AsyncSession, user: User, tenant: Tenant) -> dict:
     access_token = create_access_token(
         {
             "sub": str(user.id),
@@ -198,7 +198,7 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
         logger.warning("stripe customer creation failed for tenant %s: %s", tenant.id, exc)
 
     verify_token = await _send_verification_email(db, user)
-    response = await _issue_auth_response(db, user, tenant)
+    response = await issue_auth_response(db, user, tenant)
     response["api_key"] = raw_api_key  # secret: server-side use only, shown once
     response["widget_key"] = raw_widget_key
     response["verification_token"] = verify_token
@@ -223,8 +223,11 @@ async def login(body: LoginRequest, request: Request, db: AsyncSession = Depends
     tenant = await db.get(Tenant, user.tenant_id)
     if not tenant or not tenant.is_active:
         raise HTTPException(status_code=403, detail="Account suspended")
+    if tenant.sso_enforced and user.role != "owner":
+        # Owners keep password login as a break-glass path if the IdP is down or misconfigured.
+        raise HTTPException(status_code=403, detail="Your organization requires single sign-on")
 
-    response = await _issue_auth_response(db, user, tenant)
+    response = await issue_auth_response(db, user, tenant)
     await log_audit(db, "login", tenant_id=str(tenant.id), user_id=str(user.id), ip_address=_client_ip(request))
     return response
 
@@ -386,7 +389,7 @@ async def accept_invite(body: AcceptInviteRequest, request: Request, db: AsyncSe
     await db.flush()
 
     tenant = await db.get(Tenant, invite.tenant_id)
-    response = await _issue_auth_response(db, user, tenant)
+    response = await issue_auth_response(db, user, tenant)
     await log_audit(db, "invite_accepted", tenant_id=str(tenant.id), user_id=str(user.id), ip_address=_client_ip(request))
     return response
 

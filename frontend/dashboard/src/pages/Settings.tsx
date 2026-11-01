@@ -7,12 +7,13 @@ import { Button, Card, Input, Skeleton, useToast } from '../components/ui'
 import UsageBar from '../components/UsageBar'
 import { cn } from '../lib/cn'
 
-type Tab = 'profile' | 'team' | 'access' | 'keys' | 'billing' | 'danger'
+type Tab = 'profile' | 'team' | 'access' | 'sso' | 'keys' | 'billing' | 'danger'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
   { id: 'team', label: 'Team' },
   { id: 'access', label: 'Access' },
+  { id: 'sso', label: 'SSO' },
   { id: 'keys', label: 'API Keys' },
   { id: 'billing', label: 'Billing' },
   { id: 'danger', label: 'Danger Zone' },
@@ -24,7 +25,7 @@ export default function Settings() {
   const [tab, setTab] = useState<Tab>(initialTab && TABS.some((t) => t.id === initialTab) ? initialTab : 'profile')
   const { user, tenant } = useAuthStore()
   const { toast } = useToast()
-  const visibleTabs = TABS.filter((t) => t.id !== 'access' || user?.role !== 'member')
+  const visibleTabs = TABS.filter((t) => !['access', 'sso'].includes(t.id) || user?.role !== 'member')
 
   return (
     <div>
@@ -46,6 +47,7 @@ export default function Settings() {
       {tab === 'profile' && <ProfileTab user={user} toast={toast} />}
       {tab === 'team' && <TeamTab toast={toast} />}
       {tab === 'access' && <AccessTab toast={toast} />}
+      {tab === 'sso' && <SsoTab toast={toast} />}
       {tab === 'keys' && <ApiKeysTab toast={toast} />}
       {tab === 'billing' && <BillingTab toast={toast} />}
       {tab === 'danger' && <DangerTab tenant={tenant} toast={toast} />}
@@ -251,6 +253,111 @@ function AccessTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
             )}
           </div>
         ))}
+      </Card>
+    </div>
+  )
+}
+
+interface SsoConfig {
+  available: boolean
+  domains: string[]
+  enforced: boolean
+  callback_url: string
+  connections: { name: string; type: string }[]
+  directory: { type: string; scim_endpoint: string | null } | null
+}
+
+function SsoTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
+  const [config, setConfig] = useState<SsoConfig | null>(null)
+  const [domains, setDomains] = useState('')
+  const [enforced, setEnforced] = useState(false)
+  const [metadataUrl, setMetadataUrl] = useState('')
+  const [directoryType, setDirectoryType] = useState('okta-scim-v2')
+  const [scim, setScim] = useState<{ scim_endpoint: string; scim_token: string } | null>(null)
+
+  const load = () =>
+    void api.get<SsoConfig>('/sso/config').then(({ data }) => {
+      setConfig(data)
+      setDomains(data.domains.join(', '))
+      setEnforced(data.enforced)
+    }).catch((err) => toast('error', errorDetail(err, 'Could not load SSO settings')))
+  useEffect(() => { load() }, [])
+
+  const run = async (action: () => Promise<unknown>, success: string) => {
+    try {
+      await action()
+      toast('success', success)
+      load()
+    } catch (err) {
+      toast('error', errorDetail(err, 'That did not work'))
+    }
+  }
+
+  if (!config) return <Skeleton className="h-40 w-full max-w-2xl" />
+  if (!config.available) {
+    return <Card className="p-6 max-w-2xl"><p className="text-sm text-muted">Single sign-on is not enabled on this server.</p></Card>
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card className="p-6 space-y-3">
+        <h3 className="font-semibold">1. Identity provider</h3>
+        <p className="text-xs text-muted">
+          Create a SAML app in Okta, Entra ID or Google Workspace with this ACS / redirect URL, then paste its metadata URL.
+        </p>
+        <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{config.callback_url}</pre>
+        {config.connections.length > 0 ? (
+          <div className="flex items-center justify-between">
+            <p className="text-sm">Connected: {config.connections.map((c) => `${c.name} (${c.type.toUpperCase()})`).join(', ')}</p>
+            <Button variant="danger" size="sm" onClick={() => void run(() => api.delete('/sso/connection'), 'Connection removed')}>Remove</Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Input id="sso-metadata" placeholder="https://idp.example.com/app/metadata" value={metadataUrl} onChange={(e) => setMetadataUrl(e.target.value)} />
+            <Button onClick={() => void run(() => api.post('/sso/connection', { metadata_url: metadataUrl }), 'Connected')} disabled={!metadataUrl.trim()}>Connect</Button>
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-6 space-y-3">
+        <h3 className="font-semibold">2. Email domains</h3>
+        <p className="text-xs text-muted">People with these email domains are sent to your identity provider when they sign in.</p>
+        <Input id="sso-domains" placeholder="company.com, company.co.uk" value={domains} onChange={(e) => setDomains(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={enforced} onChange={(e) => setEnforced(e.target.checked)} />
+          Require SSO for everyone except owners
+        </label>
+        <Button
+          onClick={() => void run(() => api.put('/sso/domains', { domains: domains.split(',').map((d) => d.trim()).filter(Boolean), enforced }), 'Domains saved')}
+        >
+          Save
+        </Button>
+      </Card>
+
+      <Card className="p-6 space-y-3">
+        <h3 className="font-semibold">3. User provisioning (SCIM)</h3>
+        {config.directory ? (
+          <p className="text-sm">Connected ({config.directory.type}). Users and groups sync automatically; removed users lose access immediately.</p>
+        ) : scim ? (
+          <div className="space-y-2 text-sm">
+            <p>Paste these into your identity provider's SCIM settings. The token is shown once.</p>
+            <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{scim.scim_endpoint}</pre>
+            <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{scim.scim_token}</pre>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <select value={directoryType} onChange={(e) => setDirectoryType(e.target.value)} aria-label="Identity provider" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
+              <option value="okta-scim-v2">Okta</option>
+              <option value="azure-scim-v2">Microsoft Entra ID</option>
+              <option value="onelogin-scim-v2">OneLogin</option>
+              <option value="jumpcloud-scim-v2">JumpCloud</option>
+              <option value="generic-scim-v2">Other (SCIM 2.0)</option>
+            </select>
+            <Button onClick={() => void run(async () => { const { data } = await api.post('/sso/directory', { type: directoryType }); setScim(data) }, 'Directory created')}>
+              Create SCIM endpoint
+            </Button>
+          </div>
+        )}
       </Card>
     </div>
   )

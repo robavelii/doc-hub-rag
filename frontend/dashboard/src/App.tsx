@@ -5,6 +5,7 @@ import { ToastProvider } from './components/ui'
 import Onboarding from './components/Onboarding'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import SsoCallback from './pages/SsoCallback'
 import Documents from './pages/Documents'
 import Chat from './pages/Chat'
 import Usage from './pages/Usage'
@@ -35,6 +36,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/sso/callback" element={<SsoCallback />} />
             <Route
               path="/*"
               element={

@@ -2,6 +2,7 @@ import json
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -29,7 +30,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "Validation error",
                 "code": 422,
-                "details": exc.errors(),
+                # ctx can hold the raised exception object (model validators); make it JSON-safe.
+                "details": jsonable_encoder(exc.errors(), custom_encoder={Exception: str}),
                 "request_id": getattr(request.state, "request_id", None),
             },
         )
