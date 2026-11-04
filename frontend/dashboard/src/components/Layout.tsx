@@ -1,31 +1,26 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ChevronLeft,
+  BarChart3,
   FileText,
-  LayoutDashboard,
   Link2,
   LogOut,
-  Menu,
-  MessageSquare,
+  Moon,
+  PanelLeft,
   Puzzle,
   Settings,
   Shield,
+  SquarePen,
+  Sun,
   User,
   X,
 } from 'lucide-react'
 import type { UsageSummary } from '@shared/types'
 import api from '../lib/api'
 import { useAuthStore } from '../store/authStore'
-import {
-  Avatar,
-  Badge,
-  Dropdown,
-  DropdownItem,
-  DropdownSeparator,
-  IconButton,
-  ThemeToggle,
-} from './ui'
+import { useTheme } from '../theme/ThemeProvider'
+import ConversationSidebar from './ConversationSidebar'
+import { Avatar, Dropdown, DropdownItem, DropdownSeparator, IconButton } from './ui'
 import { cn } from '../lib/cn'
 
 interface LayoutProps {
@@ -33,9 +28,8 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { to: '/chat', label: 'Chat', icon: MessageSquare },
   { to: '/documents', label: 'Documents', icon: FileText },
-  { to: '/usage', label: 'Analytics', icon: LayoutDashboard },
+  { to: '/usage', label: 'Analytics', icon: BarChart3 },
   { to: '/widget', label: 'Widget', icon: Puzzle },
   { to: '/integrations', label: 'Integrations', icon: Link2 },
   { to: '/settings', label: 'Settings', icon: Settings },
@@ -43,207 +37,199 @@ const navItems = [
 
 const adminNavItems = [
   { to: '/admin/tenants', label: 'Tenants', icon: Shield },
-  { to: '/admin/usage', label: 'Global Usage', icon: LayoutDashboard },
+  { to: '/admin/usage', label: 'Global usage', icon: BarChart3 },
 ]
 
-function getBreadcrumb(pathname: string) {
-  const all = [...navItems, ...adminNavItems]
-  const item = all.find((n) => pathname.startsWith(n.to))
-  if (pathname.startsWith('/admin')) return `Admin / ${item?.label ?? 'Panel'}`
+const COLLAPSE_KEY = 'doc-hub-sidebar-collapsed'
+
+function pageTitle(pathname: string) {
+  if (pathname.startsWith('/chat')) return 'Chat'
+  const item = [...navItems, ...adminNavItems].find((n) => pathname.startsWith(n.to))
+  if (pathname.startsWith('/admin')) return `Admin: ${item?.label ?? 'Panel'}`
   return item?.label || 'Dashboard'
+}
+
+function readCollapsed() {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === 'true'
+  } catch {
+    return false
+  }
 }
 
 export default function Layout({ children }: LayoutProps) {
   const { tenant, user, logout } = useAuthStore()
+  const { theme, toggleTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(readCollapsed)
   const [usage, setUsage] = useState<UsageSummary | null>(null)
-  const breadcrumb = getBreadcrumb(location.pathname)
+  const isChat = location.pathname.startsWith('/chat')
+  const tokenPct = usage ? Math.min(100, Math.round((usage.tokens_used / usage.tokens_limit) * 100)) : 0
 
   useEffect(() => {
     void api.get<UsageSummary>('/usage/summary').then(({ data }) => setUsage(data))
   }, [location.pathname])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLLAPSE_KEY, String(collapsed))
+    } catch {
+      // per-visit only
+    }
+  }, [collapsed])
+
+  const closeMobile = () => setMobileOpen(false)
+
   return (
-    <div className="flex min-h-screen">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+    <div className="flex h-dvh overflow-hidden bg-bg">
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-scrim/40 lg:hidden" onClick={closeMobile} aria-hidden="true" />
       )}
 
-      {/* Sidebar */}
       <aside
+        aria-label="Sidebar"
         className={cn(
-          'fixed top-0 left-0 z-50 flex h-screen flex-col border-r border-glass-border',
-          'glass transition-all duration-300 ease-out',
-          'lg:sticky lg:translate-x-0',
-          collapsed ? 'w-[68px]' : 'w-sidebar',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          'fixed inset-y-0 left-0 z-50 flex w-sidebar flex-col bg-sidebar',
+          'transition-transform duration-short ease-out lg:static lg:z-auto',
+          mobileOpen ? 'translate-x-0 shadow-lg' : '-translate-x-full',
+          collapsed ? 'lg:hidden' : 'lg:translate-x-0'
         )}
       >
-        {/* Brand */}
-        <div className={cn('flex items-center gap-3 p-4 border-b border-border-subtle', collapsed && 'justify-center px-2')}>
-          <img src="/brand/logo.svg" alt="Doc-Hub" className="h-8 w-8 shrink-0" />
-          {!collapsed && (
-            <div className="flex-1 min-w-0 animate-fade-in">
-              <h2 className="text-sm font-bold text-text truncate">Doc-Hub</h2>
-              <p className="text-[10px] text-muted truncate">{tenant?.name || 'Dashboard'}</p>
-            </div>
-          )}
-          {/* Mobile close */}
-          <button
-            className="lg:hidden p-1 rounded-md text-muted hover:text-text"
-            onClick={() => setSidebarOpen(false)}
-          >
+        <div className="flex h-14 items-center justify-between px-3">
+          <NavLink to="/chat" onClick={closeMobile} className="rounded-md px-1.5 py-1 text-[17px] font-semibold tracking-tight text-text">
+            Doc-Hub
+          </NavLink>
+          <IconButton label="Close sidebar" onClick={closeMobile} className="lg:hidden">
             <X size={18} />
-          </button>
+          </IconButton>
+          <IconButton label="Hide sidebar" onClick={() => setCollapsed(true)} className="hidden lg:inline-flex">
+            <PanelLeft size={18} />
+          </IconButton>
         </div>
 
-        {/* Nav */}
-        <nav className={cn('flex-1 flex flex-col gap-0.5 p-2 overflow-y-auto', collapsed && 'items-center')}>
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium',
-                  'transition-all duration-200',
-                  collapsed && 'justify-center px-2',
-                  isActive
-                    ? 'bg-primary-muted text-primary'
-                    : 'text-muted hover:text-text hover:bg-surface-2/50'
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {/* Active indicator bar */}
-                  {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-primary" />
-                  )}
-                  <Icon size={18} className={cn('shrink-0', isActive && 'text-primary')} />
-                  {!collapsed && <span>{label}</span>}
-                </>
-              )}
-            </NavLink>
-          ))}
-          {user?.is_superadmin && (
-            <div className={cn('mt-4 pt-4 border-t border-border-subtle', collapsed && 'w-full')}>
-              {!collapsed && (
-                <p className="px-3 text-[10px] uppercase tracking-wider text-muted mb-2">Admin</p>
-              )}
-              {adminNavItems.map(({ to, label, icon: Icon }) => (
+        <nav aria-label="Workspace" className="px-2">
+          <NavLink
+            to="/chat"
+            end
+            onClick={closeMobile}
+            className={({ isActive }) =>
+              cn(
+                'flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm font-medium transition-colors duration-micro',
+                isActive ? 'bg-primary-muted text-text' : 'text-text hover:bg-primary-muted'
+              )
+            }
+          >
+            <SquarePen size={16} />
+            New chat
+          </NavLink>
+          <ul className="mt-1">
+            {navItems.map(({ to, label, icon: Icon }) => (
+              <li key={to}>
                 <NavLink
-                  key={to}
                   to={to}
-                  title={label}
-                  className={({ isActive }) => cn(
-                    'flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium',
-                    collapsed && 'justify-center px-2',
-                    isActive ? 'bg-primary-muted text-primary' : 'text-muted hover:text-text'
-                  )}
+                  onClick={closeMobile}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm transition-colors duration-micro',
+                      isActive ? 'bg-primary-muted font-medium text-text' : 'text-text-secondary hover:bg-primary-muted hover:text-text'
+                    )
+                  }
                 >
-                  <Icon size={16} />
-                  {!collapsed && <span>{label}</span>}
+                  <Icon size={16} className="text-muted" />
+                  {label}
                 </NavLink>
-              ))}
-            </div>
-          )}
+              </li>
+            ))}
+          </ul>
         </nav>
 
-        {/* Bottom section */}
-        <div className={cn('p-3 border-t border-border-subtle', collapsed && 'flex flex-col items-center gap-2')}>
-          {!collapsed && usage && (
-            <div className="mb-3 w-full">
-              <div className="flex justify-between text-[10px] text-muted mb-1">
-                <span>Tokens</span>
-                <span>{Math.round((usage.tokens_used / usage.tokens_limit) * 100)}%</span>
-              </div>
-              <div className="h-1 rounded-full bg-border overflow-hidden">
-                <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, (usage.tokens_used / usage.tokens_limit) * 100)}%` }} />
-              </div>
-            </div>
+        <h2 className="mt-4 px-4 pb-1.5 text-xs font-medium text-muted">Chats</h2>
+        <ConversationSidebar onNavigate={closeMobile} />
+
+        <div className="border-t border-border p-2">
+          {usage && (
+            <NavLink to="/usage" onClick={closeMobile} className="mb-1 block rounded-lg px-2 py-2 hover:bg-primary-muted">
+              <span className="flex items-baseline justify-between text-xs text-muted">
+                <span>
+                  Tokens, <span className="font-medium text-text-secondary">{usage.plan}</span> plan
+                </span>
+                <span className="tabular">{tokenPct}%</span>
+              </span>
+              <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-surface-3">
+                <span className="block h-full origin-left rounded-full bg-text" style={{ transform: `scaleX(${tokenPct / 100})` }} />
+              </span>
+            </NavLink>
           )}
-          {!collapsed && (
-            <div className="flex items-center gap-2 mb-3">
-              <Badge variant="primary" className="text-[10px]">{usage?.plan ?? tenant?.slug ?? 'free'}</Badge>
+
+          <Dropdown
+            side="top"
+            align="left"
+            className="w-full"
+            menuClassName="w-[244px]"
+            trigger={
+              <button type="button" className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-primary-muted">
+                <Avatar name={user?.email || tenant?.name} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-text">{user?.email?.split('@')[0] || 'Account'}</span>
+                  <span className="block truncate text-xs text-muted">{tenant?.name}</span>
+                </span>
+              </button>
+            }
+          >
+            <div className="px-2.5 py-2">
+              <p className="truncate text-sm font-medium text-text">{user?.email}</p>
+              <p className="text-xs text-muted">{user?.role || 'member'}</p>
             </div>
-          )}
-          <div className={cn('flex items-center', collapsed ? 'flex-col gap-2' : 'justify-between')}>
-            <ThemeToggle />
-            <IconButton
-              label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={() => setCollapsed(!collapsed)}
-              className="hidden lg:inline-flex"
-            >
-              <ChevronLeft size={16} className={cn('transition-transform', collapsed && 'rotate-180')} />
-            </IconButton>
-          </div>
+            <DropdownSeparator />
+            <DropdownItem icon={<User size={15} />} onClick={() => navigate('/settings')}>
+              Profile
+            </DropdownItem>
+            <DropdownItem icon={<Settings size={15} />} onClick={() => navigate('/settings')}>
+              Settings
+            </DropdownItem>
+            <DropdownItem icon={theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} onClick={toggleTheme}>
+              {theme === 'dark' ? 'Light theme' : 'Dark theme'}
+            </DropdownItem>
+            {user?.is_superadmin && (
+              <>
+                <DropdownSeparator />
+                {adminNavItems.map(({ to, label, icon: Icon }) => (
+                  <DropdownItem key={to} icon={<Icon size={15} />} onClick={() => navigate(to)}>
+                    {label}
+                  </DropdownItem>
+                ))}
+              </>
+            )}
+            <DropdownSeparator />
+            <DropdownItem icon={<LogOut size={15} />} danger onClick={logout}>
+              Sign out
+            </DropdownItem>
+          </Dropdown>
         </div>
       </aside>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 lg:px-6 h-header border-b border-border-subtle glass">
-          <div className="flex items-center gap-3">
-            <IconButton
-              label="Open menu"
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden"
-            >
-              <Menu size={20} />
-            </IconButton>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted hidden sm:inline">Dashboard</span>
-              <span className="text-muted hidden sm:inline">/</span>
-              <span className="font-medium text-text">{breadcrumb}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* User dropdown */}
-            <Dropdown
-              trigger={
-                <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-surface-2/50 transition-colors">
-                  <Avatar name={user?.email || tenant?.name} size="sm" />
-                  <span className="text-sm text-text-secondary hidden sm:inline max-w-[120px] truncate">
-                    {user?.email?.split('@')[0] || 'User'}
-                  </span>
-                </button>
-              }
-            >
-              <div className="px-3 py-2">
-                <p className="text-sm font-medium text-text truncate">{user?.email}</p>
-                <p className="text-xs text-muted">{user?.role || 'member'}</p>
-              </div>
-              <DropdownSeparator />
-              <DropdownItem icon={<User size={15} />} onClick={() => navigate('/settings')}>
-                Profile
-              </DropdownItem>
-              <DropdownItem icon={<Settings size={15} />} onClick={() => navigate('/settings')}>
-                Settings
-              </DropdownItem>
-              <DropdownSeparator />
-              <DropdownItem icon={<LogOut size={15} />} danger onClick={logout}>
-                Sign out
-              </DropdownItem>
-            </Dropdown>
-          </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-2 px-3 lg:px-4">
+          <IconButton label="Open sidebar" onClick={() => setMobileOpen(true)} className="lg:hidden">
+            <PanelLeft size={18} />
+          </IconButton>
+          {collapsed && (
+            <>
+              <IconButton label="Show sidebar" onClick={() => setCollapsed(false)} className="hidden lg:inline-flex">
+                <PanelLeft size={18} />
+              </IconButton>
+              <IconButton label="New chat" onClick={() => navigate('/chat')} className="hidden lg:inline-flex">
+                <SquarePen size={18} />
+              </IconButton>
+            </>
+          )}
+          <h1 className="truncate text-[15px] font-medium text-text">{pageTitle(location.pathname)}</h1>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
-          <div className="animate-fade-in-up" key={location.pathname}>
-            {children}
-          </div>
+        <main className={cn('min-h-0 flex-1', isChat ? 'flex flex-col' : 'overflow-y-auto')}>
+          {isChat ? children : <div className="mx-auto w-full max-w-6xl px-4 pb-12 pt-2 lg:px-8">{children}</div>}
         </main>
       </div>
     </div>

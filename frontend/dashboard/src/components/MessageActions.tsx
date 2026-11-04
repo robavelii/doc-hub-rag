@@ -45,7 +45,7 @@ export default function MessageActions({ question, answer, sources }: MessageAct
   }
 
   return (
-    <div className="flex items-center gap-0.5 mt-2">
+    <div className="flex items-center gap-0.5">
       <IconButton label="Copy answer" onClick={() => void handleCopyAnswer()}>
         {copied === 'answer' ? <Check size={14} className="text-success" /> : <Copy size={14} />}
       </IconButton>

@@ -1,39 +1,27 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 
-type CardVariant = 'default' | 'glass'
-
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode
-  variant?: CardVariant
 }
 
-export function Card({ className, children, variant = 'default', ...props }: CardProps) {
+export function Card({ className, children, ...props }: CardProps) {
   return (
-    <div
-      className={cn(
-        'rounded-xl p-5 animate-fade-in',
-        variant === 'glass'
-          ? 'glass shadow-md'
-          : 'bg-surface border border-border shadow-sm',
-        className
-      )}
-      {...props}
-    >
+    <div className={cn('rounded-xl border border-border bg-surface p-5 shadow-sm', className)} {...props}>
       {children}
     </div>
   )
 }
 
-export function CardHeader({ className, children, ...props }: Omit<CardProps, 'variant'>) {
+export function CardHeader({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn('mb-4 flex items-center justify-between', className)} {...props}>
+    <div className={cn('mb-4 flex items-center justify-between gap-3', className)} {...props}>
       {children}
     </div>
   )
 }
 
-export function CardTitle({ className, children, ...props }: Omit<CardProps, 'variant'>) {
+export function CardTitle({ className, children, ...props }: CardProps) {
   return (
     <h3 className={cn('text-base font-semibold text-text', className)} {...props}>
       {children}
@@ -41,9 +29,9 @@ export function CardTitle({ className, children, ...props }: Omit<CardProps, 'va
   )
 }
 
-export function CardDescription({ className, children, ...props }: Omit<CardProps, 'variant'>) {
+export function CardDescription({ className, children, ...props }: CardProps) {
   return (
-    <p className={cn('text-sm text-muted mt-1', className)} {...props}>
+    <p className={cn('mt-1 text-sm text-muted', className)} {...props}>
       {children}
     </p>
   )

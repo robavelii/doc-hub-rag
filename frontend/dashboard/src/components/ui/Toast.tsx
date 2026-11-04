@@ -25,10 +25,10 @@ const icons: Record<ToastVariant, typeof CheckCircle> = {
 }
 
 const colors: Record<ToastVariant, string> = {
-  success: 'text-success border-success/20',
-  error: 'text-danger border-danger/20',
-  warning: 'text-warning border-warning/20',
-  info: 'text-info border-info/20',
+  success: 'text-success',
+  error: 'text-danger',
+  warning: 'text-warning',
+  info: 'text-info',
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -50,18 +50,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast: addToast }}>
       {children}
       {/* Toast container */}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" role="status" aria-live="polite">
         {toasts.map((t) => {
           const Icon = icons[t.variant]
           return (
             <div
               key={t.id}
               className={cn(
-                'pointer-events-auto flex items-start gap-3 rounded-xl border p-4 pr-3 min-w-[320px] max-w-[420px]',
-                'glass shadow-lg',
+                'pointer-events-auto flex items-start gap-3 rounded-xl border border-border bg-surface p-3.5 pr-2.5',
+                'w-[min(380px,calc(100vw-2rem))] shadow-lg animate-fade-in',
                 colors[t.variant]
               )}
-              style={{ animation: 'slideToast 300ms cubic-bezier(0.34, 1.56, 0.64, 1)' }}
             >
               <Icon size={18} className="shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
@@ -71,8 +70,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 )}
               </div>
               <button
+                type="button"
+                aria-label="Dismiss notification"
                 onClick={() => removeToast(t.id)}
-                className="shrink-0 p-1 rounded-md text-muted hover:text-text hover:bg-surface-2/50 transition-colors"
+                className="shrink-0 rounded-md p-1 text-muted transition-colors duration-micro hover:bg-primary-muted hover:text-text"
               >
                 <X size={14} />
               </button>

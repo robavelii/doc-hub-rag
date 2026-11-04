@@ -33,7 +33,7 @@ export function ProgressRing({
 
   return (
     <div className={cn('relative inline-flex items-center justify-center', className)}>
-      <svg width={size} height={size} className="-rotate-90">
+      <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
         {/* Background ring */}
         <circle
           cx={size / 2}

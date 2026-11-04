@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { Send, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { ArrowUp, ThumbsDown, ThumbsUp } from 'lucide-react'
 import type { ConversationMessage, QueryResultMetrics, QuerySource } from '@shared/types'
 import MarkdownAnswer from './MarkdownAnswer'
 import MessageActions from './MessageActions'
 import QueryMetrics from './QueryMetrics'
 import SourcesPanel from './SourcesPanel'
-import { Avatar, Button, EmptyState, Textarea, useToast } from './ui'
+import { IconButton, useToast } from './ui'
 import { streamQuery } from '../lib/stream'
 import api from '../lib/api'
-import { cn } from '../lib/cn'
 
 interface DisplayMessage {
   role: 'user' | 'assistant'
@@ -30,6 +29,72 @@ interface Props {
   conversationId: string | null
   initialMessages?: ConversationMessage[]
   onConversationCreated?: (id: string) => void
+}
+
+function formatTime(iso?: string) {
+  return iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
+}
+
+interface ComposerProps {
+  value: string
+  onChange: (v: string) => void
+  onSubmit: () => void
+  busy: boolean
+  autoFocus?: boolean
+}
+
+function Composer({ value, onChange, onSubmit, busy, autoFocus }: ComposerProps) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  // Grow with the text up to about eight lines, then scroll
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 208)}px`
+  }, [value])
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    onSubmit()
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="rounded-3xl border border-field bg-surface shadow-md transition-[border-color] duration-micro focus-within:border-muted"
+    >
+      <label htmlFor="chat-input" className="sr-only">
+        Ask a question
+      </label>
+      <textarea
+        id="chat-input"
+        ref={ref}
+        rows={1}
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault()
+            onSubmit()
+          }
+        }}
+        placeholder="Ask a question…"
+        className="block max-h-52 w-full resize-none bg-transparent px-5 pb-1 pt-4 text-[15px] leading-relaxed text-text placeholder:text-muted focus-visible:outline-none"
+      />
+      <div className="flex items-center justify-end px-3 pb-3">
+        <button
+          type="submit"
+          disabled={busy || !value.trim()}
+          aria-label="Send"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-fg transition-[background-color,transform] duration-micro hover:bg-primary-hover active:translate-y-px disabled:cursor-not-allowed disabled:bg-surface-3 disabled:text-muted"
+        >
+          <ArrowUp size={18} strokeWidth={2.25} />
+        </button>
+      </div>
+    </form>
+  )
 }
 
 export default function ChatThread({ conversationId, initialMessages = [], onConversationCreated }: Props) {
@@ -54,7 +119,7 @@ export default function ChatThread({ conversationId, initialMessages = [], onCon
   }, [conversationId])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages])
 
   const sendMessage = async (text?: string) => {
@@ -130,90 +195,94 @@ export default function ChatThread({ conversationId, initialMessages = [], onCon
     toast('success', rating === 1 ? 'Thanks for the feedback!' : 'Feedback recorded')
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-        {messages.length === 0 && (
-          <EmptyState
-            title="Start a conversation"
-            description="Ask questions about your uploaded documents and get cited answers."
-            action={<Button onClick={() => void sendMessage(SUGGESTED_PROMPTS[0])}>Try a sample question</Button>}
-          />
-        )}
+  if (messages.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 pb-[12vh]">
+        <div className="w-full max-w-2xl">
+          <h2 className="text-center text-[28px] font-semibold leading-tight tracking-tight text-text">Start a conversation</h2>
+          <p className="mb-7 mt-2 text-center text-[15px] text-muted">
+            Ask questions about your uploaded documents and get cited answers.
+          </p>
+          <Composer value={input} onChange={setInput} onSubmit={() => void sendMessage()} busy={loading} autoFocus />
+          <ul className="mt-5 grid gap-1" aria-label="Suggested questions">
+            {SUGGESTED_PROMPTS.map((p) => (
+              <li key={p}>
+                <button
+                  type="button"
+                  onClick={() => void sendMessage(p)}
+                  className="w-full rounded-xl px-4 py-2.5 text-left text-sm text-text-secondary transition-colors duration-micro hover:bg-primary-muted hover:text-text"
+                >
+                  {p}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    )
+  }
 
-        {messages.map((msg, i) => (
-          <div key={i} className={cn('flex gap-3', msg.role === 'user' ? 'flex-row-reverse' : '')}>
-            <Avatar name={msg.role === 'user' ? 'You' : 'AI'} size="sm" />
-            <div className={cn('max-w-[80%]', msg.role === 'user' ? 'items-end' : '')}>
-              <div
-                className={cn(
-                  'rounded-2xl px-4 py-3',
-                  msg.role === 'user'
-                    ? 'bg-primary/15 border border-primary/30'
-                    : 'glass border border-glass-border'
-                )}
-              >
-                {msg.role === 'assistant' ? (
-                  <>
-                    <MarkdownAnswer content={msg.content} sources={msg.sources} />
-                    {msg.streaming && (
-                      <span className="inline-flex gap-1 ml-1">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0.1s' }} />
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0.2s' }} />
-                      </span>
-                    )}
-                    {!msg.streaming && msg.content && (
-                      <>
-                        <MessageActions question={messages[i - 1]?.content} answer={msg.content} sources={msg.sources} />
-                        {msg.sources && msg.sources.length > 0 && <SourcesPanel sources={msg.sources} />}
-                        {msg.metrics && <QueryMetrics metrics={msg.metrics} />}
-                        {msg.query_log_id && (
-                          <div className="flex gap-1 mt-2 pt-2 border-t border-border-subtle">
-                            <button type="button" aria-label="Helpful answer" onClick={() => void submitFeedback(msg.query_log_id!, 1)} className="p-1.5 rounded-md text-muted hover:text-success">
-                              <ThumbsUp size={14} />
-                            </button>
-                            <button type="button" aria-label="Unhelpful answer" onClick={() => void submitFeedback(msg.query_log_id!, -1)} className="p-1.5 rounded-md text-muted hover:text-danger">
-                              <ThumbsDown size={14} />
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </>
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <ol className="mx-auto w-full max-w-3xl space-y-8 px-4 pb-8 pt-4" aria-label="Conversation">
+          {messages.map((msg, i) =>
+            msg.role === 'user' ? (
+              <li key={i} className="flex flex-col items-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-3xl bg-surface-3 px-4 py-2.5 text-[15px] leading-relaxed text-text">
+                  {msg.content}
+                </div>
+                {msg.created_at && <time className="mt-1 px-2 text-xs text-muted">{formatTime(msg.created_at)}</time>}
+              </li>
+            ) : (
+              <li key={i} className="group">
+                <div className="mb-1.5 flex items-baseline gap-2 text-sm">
+                  <span className="font-semibold text-text">Doc-Hub</span>
+                  {msg.created_at && <time className="text-xs text-muted">{formatTime(msg.created_at)}</time>}
+                </div>
+
+                {msg.streaming && !msg.content ? (
+                  <p className="text-[15px] text-muted" role="status">
+                    Searching your documents
+                    <span className="ml-1 inline-block h-4 w-0.5 translate-y-0.5 bg-muted animate-caret" aria-hidden="true" />
+                  </p>
                 ) : (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  <MarkdownAnswer content={msg.content} sources={msg.sources} />
                 )}
-              </div>
-              {msg.created_at && (
-                <p className="text-[10px] text-muted mt-1 px-1">
-                  {new Date(msg.created_at).toLocaleTimeString()}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
+                {msg.streaming && msg.content && (
+                  <span className="inline-block h-4 w-0.5 translate-y-0.5 bg-text animate-caret" aria-hidden="true" />
+                )}
+
+                {!msg.streaming && msg.content && (
+                  <>
+                    {msg.sources && msg.sources.length > 0 && <SourcesPanel sources={msg.sources} />}
+                    <div className="mt-2 flex flex-wrap items-center gap-0.5 text-muted">
+                      <MessageActions question={messages[i - 1]?.content} answer={msg.content} sources={msg.sources} />
+                      {msg.query_log_id && (
+                        <>
+                          <IconButton label="Helpful answer" onClick={() => void submitFeedback(msg.query_log_id!, 1)} className="hover:text-success">
+                            <ThumbsUp size={14} />
+                          </IconButton>
+                          <IconButton label="Unhelpful answer" onClick={() => void submitFeedback(msg.query_log_id!, -1)} className="hover:text-danger">
+                            <ThumbsDown size={14} />
+                          </IconButton>
+                        </>
+                      )}
+                    </div>
+                    {msg.metrics && <QueryMetrics metrics={msg.metrics} />}
+                  </>
+                )}
+              </li>
+            )
+          )}
+        </ol>
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 mt-4 pt-4 border-t border-border">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              void sendMessage()
-            }
-          }}
-          placeholder="Ask a question…"
-          rows={2}
-          className="flex-1 resize-none"
-          disabled={loading}
-        />
-        <Button onClick={() => void sendMessage()} disabled={loading || !input.trim()} className="self-end">
-          <Send size={18} />
-        </Button>
+      <div className="shrink-0 px-4 pb-4">
+        <div className="mx-auto w-full max-w-3xl">
+          <Composer value={input} onChange={setInput} onSubmit={() => void sendMessage()} busy={loading} />
+        </div>
       </div>
     </div>
   )

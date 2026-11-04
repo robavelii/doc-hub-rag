@@ -56,7 +56,7 @@ export default function Usage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Analytics</h1>
+        <h1 className="text-2xl font-semibold">Analytics</h1>
         <div className="flex gap-2">
           {(['7d', '30d', '90d'] as const).map((r) => (
             <Button key={r} variant={range === r ? 'primary' : 'ghost'} size="sm" onClick={() => setRange(r)}>{r}</Button>
@@ -67,8 +67,8 @@ export default function Usage() {
 
       {summary && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <Card className="p-4"><p className="text-xs text-muted">Plan</p><p className="text-xl font-bold capitalize">{summary.plan}</p></Card>
-          <Card className="p-4"><p className="text-xs text-muted">Queries</p><p className="text-xl font-bold">{history?.total ?? 0}</p></Card>
+          <Card className="p-4"><p className="text-xs text-muted">Plan</p><p className="text-xl font-semibold capitalize">{summary.plan}</p></Card>
+          <Card className="p-4"><p className="text-xs text-muted">Queries</p><p className="text-xl font-semibold">{history?.total ?? 0}</p></Card>
           <Card className="p-4 col-span-2">
             <UsageBar label="Tokens" used={summary.tokens_used} limit={summary.tokens_limit} />
           </Card>
@@ -96,7 +96,7 @@ export default function Usage() {
               <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="var(--muted)" />
               <YAxis tick={{ fontSize: 10 }} stroke="var(--muted)" />
               <Tooltip />
-              <Bar dataKey="queries" fill="var(--accent-blue)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="queries" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -110,7 +110,7 @@ export default function Usage() {
             <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="var(--muted)" />
             <YAxis domain={[0, 1]} tick={{ fontSize: 10 }} stroke="var(--muted)" />
             <Tooltip />
-            <Line type="monotone" dataKey="avg_confidence" stroke="var(--accent-purple)" dot={false} />
+            <Line type="monotone" dataKey="avg_confidence" stroke="var(--chart-2)" dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </Card>

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import type { QueryResultMetrics } from '@shared/types'
 import { Badge } from './ui'
+import { cn } from '../lib/cn'
 
 interface QueryMetricsProps {
   metrics: QueryResultMetrics
@@ -42,42 +43,38 @@ export default function QueryMetrics({ metrics }: QueryMetricsProps) {
   const modelLabel = formatModelLabel(provider, model)
 
   return (
-    <div className="mt-3 rounded-md border border-border bg-surface-2">
+    <div className="mt-1">
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm"
+        className="inline-flex h-7 items-center gap-2 rounded-lg px-1.5 text-xs text-muted transition-colors duration-micro hover:bg-primary-muted hover:text-text"
       >
-        <span className="flex items-center gap-2 text-muted">
-          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <span>Metrics</span>
-          <Badge variant={conf.variant}>{conf.pct}%</Badge>
-        </span>
-        <span className="flex items-center gap-1.5">
-          {latency && <Badge>{latency}</Badge>}
-          {from_cache && <Badge variant="info">Cached</Badge>}
-        </span>
+        <span>Metrics</span>
+        <Badge variant={conf.variant}>{conf.pct}%</Badge>
+        {latency && <span className="tabular">{latency}</span>}
+        {from_cache && <Badge variant="info">Cached</Badge>}
+        <ChevronDown size={13} className={cn('transition-transform duration-micro', open && 'rotate-180')} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="border-t border-border px-3 py-3 space-y-3">
+        <div className="mt-1.5 max-w-md space-y-3 rounded-xl border border-border bg-surface p-3">
           <div>
-            <div className="flex justify-between text-xs mb-1">
+            <div className="mb-1 flex justify-between text-xs">
               <span className="text-muted">Confidence</span>
-              <span className="font-medium">{conf.pct}% — {conf.label}</span>
+              <span className="font-medium text-text">
+                {conf.pct}%, {conf.label}
+              </span>
             </div>
-            <div className="h-1.5 rounded-full bg-border overflow-hidden">
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${conf.pct}%` }}
-              />
+            <div className="h-1.5 overflow-hidden rounded-full bg-surface-3">
+              <div className="h-full origin-left rounded-full bg-text" style={{ transform: `scaleX(${conf.pct / 100})` }} />
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Badge>{sourceCount} {sourceCount === 1 ? 'source' : 'sources'}</Badge>
-            {tokens_total != null && tokens_total > 0 && (
-              <Badge>{tokens_total.toLocaleString()} tokens</Badge>
-            )}
+            <Badge>
+              {sourceCount} {sourceCount === 1 ? 'source' : 'sources'}
+            </Badge>
+            {tokens_total != null && tokens_total > 0 && <Badge>{tokens_total.toLocaleString()} tokens</Badge>}
             {modelLabel && <Badge variant="info">{modelLabel}</Badge>}
           </div>
         </div>

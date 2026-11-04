@@ -10,22 +10,22 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, error, icon, ...props }, ref) => (
     <div className="relative">
       {icon && (
-        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none">
+        <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
           {icon}
         </div>
       )}
       <input
         ref={ref}
+        aria-invalid={error || undefined}
         className={cn(
-          'w-full rounded-lg border bg-surface-2/50 px-3 py-2.5 text-sm text-text',
-          'placeholder:text-muted/60',
-          'transition-all duration-200',
-          'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 focus:bg-surface-2',
-          'hover:border-border',
-          error
-            ? 'border-danger/50 focus:ring-danger/30 focus:border-danger/40'
-            : 'border-border-subtle',
-          icon ? 'pl-10' : '',
+          'h-10 w-full rounded-lg border bg-surface px-3 text-sm text-text shadow-sm',
+          'placeholder:text-muted/70',
+          'transition-[border-color] duration-micro ease-out',
+          'hover:border-muted focus:border-focus',
+          'disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-muted',
+          'read-only:bg-surface-2',
+          error ? 'border-danger' : 'border-field',
+          icon ? 'pl-9' : '',
           className
         )}
         {...props}

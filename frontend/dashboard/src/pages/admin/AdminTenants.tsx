@@ -35,7 +35,7 @@ export default function AdminTenants() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Admin — Tenants</h1>
+      <h1 className="text-2xl font-semibold mb-6">Admin: tenants</h1>
       <div className="flex gap-2 mb-4 flex-wrap">
         <Input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-48" />
         <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">

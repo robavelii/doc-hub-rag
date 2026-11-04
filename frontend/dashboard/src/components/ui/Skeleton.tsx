@@ -11,7 +11,7 @@ export function Skeleton({ className, variant = 'text', width, height }: Skeleto
   return (
     <div
       className={cn(
-        'bg-surface-2 animate-shimmer',
+        'bg-surface-3 animate-pulse',
         variant === 'text' && 'h-4 rounded-md',
         variant === 'circular' && 'rounded-full',
         variant === 'rectangular' && 'rounded-lg',
@@ -20,8 +20,6 @@ export function Skeleton({ className, variant = 'text', width, height }: Skeleto
       style={{
         width: width ?? (variant === 'circular' ? 40 : '100%'),
         height: height ?? (variant === 'circular' ? 40 : variant === 'rectangular' ? 120 : undefined),
-        backgroundImage: 'linear-gradient(90deg, transparent 0%, var(--glass-highlight) 50%, transparent 100%)',
-        backgroundSize: '200% 100%',
       }}
     />
   )
@@ -44,7 +42,7 @@ export function SkeletonRow({ cols = 4, className }: { cols?: number; className?
   return (
     <div className={cn('flex gap-4 py-3', className)}>
       {Array.from({ length: cols }).map((_, i) => (
-        <Skeleton key={i} width={`${Math.random() * 30 + 20}%`} height={16} />
+        <Skeleton key={i} width={`${[38, 24, 30, 20, 34, 26][i % 6]}%`} height={16} />
       ))}
     </div>
   )

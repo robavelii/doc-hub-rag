@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import type { QuerySource } from '@shared/types'
+import { buildSourceIndexMap } from '../lib/markdown'
 import { cn } from '../lib/cn'
 
 interface SourcesPanelProps {
@@ -8,39 +9,49 @@ interface SourcesPanelProps {
 }
 
 export default function SourcesPanel({ sources }: SourcesPanelProps) {
-  const [open, setOpen] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
 
   if (!sources.length) return null
 
-  const unique = sources.reduce<QuerySource[]>((acc, s) => {
-    if (!acc.find((x) => x.id === s.id)) acc.push(s)
-    return acc
-  }, [])
+  // Numbered with the same map as the in-text citations, so chip 3 is always [3]
+  const indexMap = buildSourceIndexMap(sources)
+  const unique = sources.filter((s, i) => sources.findIndex((x) => x.id === s.id) === i)
+  const open = unique.find((s) => s.id === openId)
 
   return (
-    <div className="mt-3 rounded-md border border-border bg-surface-2">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-sm font-medium text-text hover:bg-surface transition-colors"
-      >
-        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        Sources ({unique.length})
-      </button>
+    <div className="mt-3">
+      <h4 className="sr-only">Sources</h4>
+      <ul className="flex flex-wrap gap-1.5">
+        {unique.map((s) => {
+          const active = s.id === openId
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                aria-expanded={active}
+                onClick={() => setOpenId(active ? null : s.id)}
+                className={cn(
+                  'inline-flex h-7 max-w-[18rem] items-center gap-1.5 rounded-lg border px-2 text-xs transition-colors duration-micro',
+                  active
+                    ? 'border-accent/40 bg-accent-soft text-text'
+                    : 'border-border bg-surface text-text-secondary hover:border-border-strong hover:text-text'
+                )}
+              >
+                <span className="tabular font-semibold text-accent">{indexMap.get(s.id)}</span>
+                <span className="truncate">{s.filename || 'source'}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
       {open && (
-        <div className="border-t border-border px-3 py-2 space-y-2">
-          {unique.map((s, i) => (
-            <div key={s.id} className="text-sm">
-              <div className="flex items-baseline gap-2">
-                <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary">
-                  [{i + 1}]
-                </span>
-                <span className="font-medium text-text truncate">{s.filename || 'source'}</span>
-              </div>
-              <p className="mt-1 text-muted leading-relaxed line-clamp-3">{s.text}</p>
-            </div>
-          ))}
-        </div>
+        <figure className="mt-2 rounded-xl border border-border bg-surface p-3.5 shadow-sm">
+          <figcaption className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-text">
+            <FileText size={13} className="text-muted" aria-hidden="true" />
+            {open.filename || 'source'}
+          </figcaption>
+          <blockquote className="text-sm leading-relaxed text-text-secondary">{open.text}</blockquote>
+        </figure>
       )}
     </div>
   )
@@ -59,9 +70,10 @@ export function SourcesToggle({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'text-xs font-medium px-2 py-1 rounded-sm transition-colors',
-        active ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text hover:bg-surface-2'
+        'rounded-md px-2 py-1 text-xs font-medium transition-colors duration-micro',
+        active ? 'bg-accent-soft text-text' : 'text-muted hover:bg-primary-muted hover:text-text'
       )}
     >
       {count} {count === 1 ? 'source' : 'sources'}
