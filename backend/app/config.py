@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     # Chat backends selectable in CHAT_PROVIDER_CHAIN besides openai/ollama/mock.
     # gemini: Google's OpenAI-compatible endpoint.
     GEMINI_API_KEY: str = ""
-    GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"
+    # 2.5 models are closed to new API keys. 3.5-flash accepts reasoning_effort=none;
+    # 3.5-flash-lite needs at least "low".
+    GEMINI_CHAT_MODEL: str = "gemini-3.5-flash"
     GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     GEMINI_REASONING_EFFORT: str = ""  # e.g. none | low; empty = model default
     # compatible: any other OpenAI-compatible API (OpenRouter, Groq, DeepSeek, Anthropic, vLLM…)
