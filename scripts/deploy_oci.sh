@@ -57,7 +57,8 @@ cd "$REL"
 ln -sf "$REMOTE_DIR/.env.prod" .env.prod
 echo "$SHA" > RELEASE
 
-dc() { docker compose -p doc-hub -f docker-compose.prod.yml --env-file .env.prod "$@"; }
+# </dev/null: this script arrives on stdin (ssh bash -s); compose must not consume the rest of it.
+dc() { docker compose -p doc-hub -f docker-compose.prod.yml --env-file .env.prod "$@" </dev/null; }
 
 # Back up the database before migrations touch it.
 if docker ps --format '{{.Names}}' | grep -qx doc_hub_postgres; then
@@ -69,7 +70,7 @@ fi
 
 # Build at low priority, one image at a time: the other apps on this host keep their CPU.
 export COMPOSE_PARALLEL_LIMIT=1
-nice -n 10 docker compose -p doc-hub -f docker-compose.prod.yml --env-file .env.prod build
+nice -n 10 docker compose -p doc-hub -f docker-compose.prod.yml --env-file .env.prod build </dev/null
 
 # Download the local embedding/reranker models once, before several workers start at the same time.
 dc run --rm --no-deps -T celery_worker python -c "
