@@ -2,13 +2,12 @@
 # scripts/deploy_oci.sh. Caddy holds 80/443 for every app on the machine; this file
 # is the only thing Doc-Hub owns there. Ports match docker-compose.prod.yml.
 #
-# doc.rfh.et: proxied by Cloudflare. Cloudflare's SSL mode for rfh.et is "full", so
-# Caddy's internal certificate is enough between Cloudflare and here (as for
-# escrow-console-staging). If the record is switched to DNS only, drop `tls internal`
-# so Caddy fetches a public certificate.
+# doc.rfh.et: an A record, DNS only (not proxied by Cloudflare), so Caddy gets a public
+# certificate and its X-Forwarded-For carries the real visitor IP for per-visitor
+# widget rate limits. If the record is ever proxied, add `tls internal` (Cloudflare SSL
+# mode for rfh.et is "full") and take the visitor IP from CF-Connecting-IP instead.
 
 doc.rfh.et {
-	tls internal
 	encode zstd gzip
 
 	request_body {
@@ -21,13 +20,8 @@ doc.rfh.et {
 
 	# API. handle_path strips /api, as the dashboard and widget expect.
 	# Server-sent events (/query/stream) are flushed immediately by Caddy.
-	# Behind Cloudflare the TCP peer is a Cloudflare edge; the visitor is CF-Connecting-IP.
-	# Per-visitor widget rate limits key on it. (A request sent straight to the origin
-	# could forge it, which only affects rate limiting, never authorization.)
 	handle_path /api/* {
-		reverse_proxy 127.0.0.1:8100 {
-			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
-		}
+		reverse_proxy 127.0.0.1:8100
 	}
 
 	redir /app /app/

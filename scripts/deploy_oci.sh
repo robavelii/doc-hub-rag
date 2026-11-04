@@ -88,18 +88,26 @@ for _ in $(seq 1 60); do
 done
 curl -fsS http://127.0.0.1:8100/health/live >/dev/null || { echo " FAILED"; dc ps; dc logs --tail 80 backend; exit 1; }
 
-# Caddy site: install only when changed; validate the whole config before reloading.
+# Caddy site: install when changed (or when the running Caddy doesn't have it), validate
+# as the caddy user, reload. A file Caddy can't load must never stay in sites/: the next
+# reload by any other app on this host would fail on it.
 SITE=/etc/caddy/sites/doc-hub.caddy
-if ! sudo cmp -s deploy/caddy/doc-hub.caddy "$SITE"; then
-  [[ -f "$SITE" ]] && sudo cp "$SITE" "$SITE.bak"
-  sudo install -m 644 deploy/caddy/doc-hub.caddy "$SITE"
-  if sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
-    sudo systemctl reload caddy && echo "Caddy reloaded with new doc-hub site"
-  else
-    echo "Caddy config invalid; restoring previous doc-hub site"
+LOG=/var/log/caddy/doc-hub.log
+if ! sudo cmp -s deploy/caddy/doc-hub.caddy "$SITE" || ! curl -fsS http://127.0.0.1:2019/config/ 2>/dev/null | grep -q doc.rfh.et; then
+  restore_site() {
+    echo "$1; restoring previous doc-hub site"
     if [[ -f "$SITE.bak" ]]; then sudo mv "$SITE.bak" "$SITE"; else sudo rm -f "$SITE"; fi
     exit 1
-  fi
+  }
+  [[ -f "$SITE" ]] && sudo cp "$SITE" "$SITE.bak"
+  sudo install -m 644 deploy/caddy/doc-hub.caddy "$SITE"
+  # Caddy runs as "caddy"; a log file created by a root-run validate would be unwritable.
+  [[ -f "$LOG" ]] || sudo install -o caddy -g caddy -m 600 /dev/null "$LOG"
+  sudo -u caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
+    || restore_site "Caddy config invalid"
+  sudo systemctl reload caddy || restore_site "Caddy reload failed (running config unchanged)"
+  sudo rm -f "$SITE.bak"
+  echo "Caddy reloaded with doc-hub site"
 fi
 
 ln -sfn "$REL" "$REMOTE_DIR/current"
