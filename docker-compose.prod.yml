@@ -196,7 +196,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M # imports the whole app: ~200 MB resident
     restart: unless-stopped
 
   landing:
