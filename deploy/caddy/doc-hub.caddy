@@ -1,0 +1,52 @@
+# Doc-Hub on the host's shared Caddy, installed as /etc/caddy/sites/doc-hub.caddy by
+# scripts/deploy_oci.sh. Caddy holds 80/443 for every app on the machine; this file
+# is the only thing Doc-Hub owns there. Ports match docker-compose.prod.yml.
+#
+# doc.rfh.et: proxied by Cloudflare. Cloudflare's SSL mode for rfh.et is "full", so
+# Caddy's internal certificate is enough between Cloudflare and here (as for
+# escrow-console-staging). If the record is switched to DNS only, drop `tls internal`
+# so Caddy fetches a public certificate.
+
+doc.rfh.et {
+	tls internal
+	encode zstd gzip
+
+	request_body {
+		max_size 50MB
+	}
+
+	# Prometheus metrics stay private (scrape on 127.0.0.1:8100/metrics).
+	@metrics path /api/metrics /api/metrics/*
+	respond @metrics 404
+
+	# API. handle_path strips /api, as the dashboard and widget expect.
+	# Server-sent events (/query/stream) are flushed immediately by Caddy.
+	# Behind Cloudflare the TCP peer is a Cloudflare edge; the visitor is CF-Connecting-IP.
+	# Per-visitor widget rate limits key on it. (A request sent straight to the origin
+	# could forge it, which only affects rate limiting, never authorization.)
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:8100 {
+			header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+		}
+	}
+
+	redir /app /app/
+	handle_path /app/* {
+		reverse_proxy 127.0.0.1:8102
+	}
+
+	handle_path /widget/* {
+		reverse_proxy 127.0.0.1:8103
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8101
+	}
+
+	log {
+		output file /var/log/caddy/doc-hub.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

@@ -29,7 +29,27 @@ def _build_chat_provider(name: str) -> AIProvider | None:
     if name == "openai":
         if not settings.OPENAI_API_KEY:
             return None
-        return OpenAIProvider()
+        return OpenAIProvider(base_url=settings.OPENAI_BASE_URL)
+    if name == "gemini":
+        if not settings.GEMINI_API_KEY:
+            return None
+        return OpenAIProvider(
+            provider_name="gemini",
+            api_key=settings.GEMINI_API_KEY,
+            base_url=settings.GEMINI_BASE_URL,
+            chat_model=settings.GEMINI_CHAT_MODEL,
+            reasoning_effort=settings.GEMINI_REASONING_EFFORT,
+        )
+    if name == "compatible":
+        if not (settings.LLM_BASE_URL and settings.LLM_API_KEY and settings.LLM_CHAT_MODEL):
+            return None
+        return OpenAIProvider(
+            provider_name="compatible",
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_BASE_URL,
+            chat_model=settings.LLM_CHAT_MODEL,
+            reasoning_effort=settings.LLM_REASONING_EFFORT,
+        )
     if name == "ollama":
         if not _ollama_reachable():
             return None
@@ -54,7 +74,7 @@ def _build_embedding_provider() -> AIProvider:
     if name == "openai":
         if not settings.OPENAI_API_KEY:
             raise EmbeddingConfigError("EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is not set")
-        return OpenAIProvider()
+        return OpenAIProvider(base_url=settings.OPENAI_BASE_URL)
     if name == "ollama":
         if settings.EMBEDDING_DIMENSIONS != OLLAMA_EMBED_DIM:
             raise EmbeddingConfigError(

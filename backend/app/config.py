@@ -18,6 +18,19 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     CHAT_MODEL: str = "gpt-4o-mini"
     EMBEDDING_DIMENSIONS: int = 768
+    OPENAI_BASE_URL: str = ""  # empty = api.openai.com
+
+    # Chat backends selectable in CHAT_PROVIDER_CHAIN besides openai/ollama/mock.
+    # gemini: Google's OpenAI-compatible endpoint.
+    GEMINI_API_KEY: str = ""
+    GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    GEMINI_REASONING_EFFORT: str = ""  # e.g. none | low; empty = model default
+    # compatible: any other OpenAI-compatible API (OpenRouter, Groq, DeepSeek, Anthropic, vLLM…)
+    LLM_BASE_URL: str = ""
+    LLM_API_KEY: str = ""
+    LLM_CHAT_MODEL: str = ""
+    LLM_REASONING_EFFORT: str = ""
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_CHAT_MODEL: str = "llama3.2:1b"
@@ -94,6 +107,8 @@ class Settings(BaseSettings):
             return ["ollama", "mock"]
         if provider == "openai":
             return ["openai", "ollama", "mock"]
+        if provider in ("gemini", "compatible"):
+            return [provider, "mock"]
         return ["mock"]
 
     @property

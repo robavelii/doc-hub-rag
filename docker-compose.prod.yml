@@ -1,18 +1,31 @@
-name: Doc-Hub
+# Production stack. Runs on a shared host (see CLAUDE.md → Deployment):
+#   docker compose -p doc-hub -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# Only loopback ports in the 81xx block are published; the host's Caddy fronts them
+# (deploy/caddy/doc-hub.caddy). Limits keep the whole stack under ~6 GB of RAM.
+name: doc-hub
+
+x-backend: &backend
+  build: ./backend
+  image: doc-hub-backend:current
+  env_file: .env.prod
+  environment: &backend-env
+    APP_ENV: production
+    S3_ENDPOINT: http://s3:9000
+    LOCAL_MODEL_CACHE_DIR: /models
+  volumes:
+    - models:/models
+  networks: [internal]
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: doc_hub_postgres
-    env_file: .env.prod
     environment:
       POSTGRES_DB: ragdb
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d ragdb"]
       interval: 10s
@@ -22,110 +35,115 @@ services:
       resources:
         limits:
           cpus: "0.75"
-          memory: 2G
+          memory: 1G
     restart: unless-stopped
     networks: [internal]
 
   redis:
     image: redis:7-alpine
     container_name: doc_hub_redis
-    env_file: .env.prod
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-    ports:
-      - "127.0.0.1:6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 192mb --maxmemory-policy noeviction
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     deploy:
       resources:
         limits:
           cpus: "0.25"
+          memory: 256M
+    restart: unless-stopped
+    networks: [internal]
+
+  # S3-compatible object storage: SeaweedFS (Apache-2.0), replacing the discontinued
+  # MinIO community images. One process runs master, volume, filer and the S3 gateway.
+  s3:
+    image: chrislusf/seaweedfs:4.51
+    container_name: doc_hub_s3
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '{"identities":[{"name":"doc-hub","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json
+        exec weed server -dir=/data -ip=s3 -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024 -volume.max=0 -s3 -s3.port=9000 -s3.config=/tmp/s3.json
+    volumes:
+      - s3_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
           memory: 512M
     restart: unless-stopped
     networks: [internal]
 
-  minio:
-    image: minio/minio:latest
-    container_name: doc_hub_minio
-    env_file: .env.prod
-    command: server /data
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks: [internal]
-
   migrate:
-    build: ./backend
+    <<: *backend
     container_name: doc_hub_migrate
-    env_file: .env.prod
     environment:
+      <<: *backend-env
       DATABASE_SYNC_URL: ${DATABASE_MIGRATE_URL}
-      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
     command: alembic upgrade head
     restart: "no"
-    networks: [internal]
 
   seed:
-    build: ./backend
+    <<: *backend
     container_name: doc_hub_seed
-    env_file: .env.prod
-    environment:
-      APP_ENV: production # never create demo tenants (public password) in prod
+    # APP_ENV=production: creates the superadmin only, never demo tenants (public password).
     depends_on:
       migrate:
         condition: service_completed_successfully
     command: python scripts/seed.py
     restart: "no"
-    networks: [internal]
 
   backend:
-    build: ./backend
+    <<: *backend
     container_name: doc_hub_backend
-    env_file: .env.prod
     environment:
-      APP_ENV: production
-      S3_ENDPOINT: http://minio:9000
-      # Trust X-Forwarded-For from the host nginx so per-visitor widget rate limits
+      <<: *backend-env
+      # Trust X-Forwarded-For from the host Caddy so per-visitor widget rate limits
       # see real client IPs. Safe because the port is bound to 127.0.0.1 only.
       FORWARDED_ALLOW_IPS: "*"
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8100:8000"
     depends_on:
       seed:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
-      minio:
+      s3:
         condition: service_healthy
-    command: gunicorn app.main:app -k uvicorn_worker.UvicornWorker -w 2 -b 0.0.0.0:8000
+    # Each worker loads the local embedding + reranker models (~400 MB).
+    command: gunicorn app.main:app -k uvicorn_worker.UvicornWorker -w 2 -b 0.0.0.0:8000 --timeout 120
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 60s
     deploy:
       resources:
         limits:
-          cpus: "0.75"
-          memory: 2G
+          cpus: "1.0"
+          memory: 1800M
     restart: unless-stopped
     networks: [internal, app]
 
   # Enterprise SSO (SAML/OIDC) + SCIM. Optional: the API works without it.
-  # Expose it to browsers at POLIS_PUBLIC_URL (e.g. https://sso.example.com via the host nginx).
+  # Expose it to browsers at POLIS_PUBLIC_URL via the host Caddy.
   polis:
     image: boxyhq/jackson:26.2.0
     container_name: doc_hub_polis
@@ -141,51 +159,60 @@ services:
       NEXTAUTH_SECRET: ${POLIS_NEXTAUTH_SECRET}
       DB_ENCRYPTION_KEY: ${POLIS_DB_ENCRYPTION_KEY}
     ports:
-      - "127.0.0.1:5225:5225"
+      - "127.0.0.1:8104:5225"
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     restart: unless-stopped
     networks: [internal]
 
   celery_worker:
-    build: ./backend
+    <<: *backend
     container_name: doc_hub_celery_worker
-    env_file: .env.prod
-    environment:
-      S3_ENDPOINT: http://minio:9000
     depends_on:
       backend:
         condition: service_healthy
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 --max-tasks-per-child=50
     deploy:
       resources:
         limits:
-          cpus: "0.75"
-          memory: 2G
+          cpus: "1.0"
+          memory: 1500M
     restart: unless-stopped
-    networks: [internal]
+    # "internal" has no egress; ingestion calls LLM/embedding APIs, URLs and Notion.
+    networks: [internal, app]
 
   celery_beat:
-    build: ./backend
+    <<: *backend
     container_name: doc_hub_celery_beat
-    env_file: .env.prod
     depends_on:
       redis:
         condition: service_healthy
-    command: celery -A app.workers.celery_app beat --loglevel=info
+    command: celery -A app.workers.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     restart: unless-stopped
-    networks: [internal]
 
   landing:
     build:
       context: ./frontend
       dockerfile: landing/Dockerfile
       args:
-        VITE_DASHBOARD_URL: ${VITE_DASHBOARD_URL:-/app}
+        VITE_DASHBOARD_URL: ${VITE_DASHBOARD_URL:-/app/}
+    image: doc-hub-landing:current
     container_name: doc_hub_landing
     ports:
-      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8101:80"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
     restart: unless-stopped
     networks: [app]
 
@@ -195,11 +222,16 @@ services:
       dockerfile: dashboard/Dockerfile
       args:
         VITE_BASE_PATH: /app/
+    image: doc-hub-dashboard:current
     container_name: doc_hub_dashboard
     ports:
-      - "127.0.0.1:3000:80"
+      - "127.0.0.1:8102:80"
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 64M
     restart: unless-stopped
     networks: [app]
 
@@ -207,15 +239,21 @@ services:
     build:
       context: ./frontend
       dockerfile: widget/Dockerfile
+    image: doc-hub-widget:current
     container_name: doc_hub_widget_cdn
     ports:
-      - "127.0.0.1:3002:80"
+      - "127.0.0.1:8103:80"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
     restart: unless-stopped
     networks: [app]
 
 volumes:
   postgres_data:
-  minio_data:
+  s3_data:
+  models:
 
 networks:
   internal:

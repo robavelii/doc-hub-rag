@@ -1,0 +1,45 @@
+name: Deploy
+
+# Ships main to the shared OCI host after CI passes, or on demand.
+# Secrets: OCI_SSH_KEY (private key for a doc-hub-only deploy key), OCI_HOST (user@ip),
+# OCI_KNOWN_HOSTS (output of `ssh-keyscan <ip>`).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-oci
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - name: SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.OCI_SSH_KEY }}" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.OCI_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.OCI_HOST }}
+        run: DEPLOY_SSH_KEY="$HOME/.ssh/deploy_key" scripts/deploy_oci.sh HEAD
+      - name: Smoke test
+        run: curl -fsS --retry 5 --retry-delay 5 https://doc.rfh.et/api/health/live

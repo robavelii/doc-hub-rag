@@ -38,6 +38,11 @@ async def get_provider_health() -> dict:
             "chat_model": settings.CHAT_MODEL,
             "embed_model": settings.EMBEDDING_MODEL,
         },
+        "gemini": {"configured": bool(settings.GEMINI_API_KEY), "chat_model": settings.GEMINI_CHAT_MODEL},
+        "compatible": {
+            "configured": bool(settings.LLM_BASE_URL and settings.LLM_API_KEY and settings.LLM_CHAT_MODEL),
+            "chat_model": settings.LLM_CHAT_MODEL,
+        },
         "ollama": await check_ollama_reachable(),
     }
 
