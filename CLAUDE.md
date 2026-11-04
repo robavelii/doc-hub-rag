@@ -16,13 +16,13 @@ backend/app/
 backend/migrations/versions/   Alembic, numbered 001_… 011_… (next: 012_)
 backend/evals/                 retrieval eval corpora, questions, baselines/local.json
 backend/tests/{unit,security,integration,e2e}
-frontend/{dashboard,landing,widget,admin,shared}   Vite + React + strict TS; shared types in frontend/shared/types.ts
+frontend/{dashboard,landing,widget,shared}   Vite + React + strict TS; shared types in frontend/shared/types.ts
 deploy/                        reverse-proxy config (see Deployment — the nginx file is NOT what the server uses)
 docker-compose.dev.yml         infra only (Postgres+pgvector, Redis, SeaweedFS S3) for local dev
 docker-compose.prod.yml        full stack, reads .env.prod
 ```
 
-Superadmin UI lives in the dashboard (`/admin/*`, `SuperAdminRoute`). `frontend/admin` is a separate legacy app: built in CI, not deployed. Don't add features to it.
+Superadmin UI lives in the dashboard (`/admin/*`, guarded by `SuperAdminRoute`); in production that is `https://doc.rfh.et/app/admin/tenants`. (The old standalone `frontend/admin` app was removed.)
 
 ## Non-negotiable invariants
 
@@ -100,4 +100,4 @@ Merged to `main` (all on 2026-11-01): #1 CI gate + CVE upgrades · #2 Phase 0 se
 
 Live since 2026-11-04 at https://doc.rfh.et (PR #8: switchable chat providers, SeaweedFS replacing MinIO, OCI deploy). No LLM key configured yet → chat falls back to `mock` until `GEMINI_API_KEY`/`OPENAI_API_KEY` is set in `/opt/doc-hub/.env.prod`. GitHub deploy secrets not set yet (needs a doc-hub-only key in the host's authorized_keys).
 
-Not done yet: scheduled pg_dump + S3 (SeaweedFS volume) backups (deploy only dumps before each release), README cleanup (references missing `DEPLOYMENT.md` / `docs/LAUNCH_CHECKLIST.md`, inconsistent demo passwords), retiring `frontend/admin`.
+Not done yet: scheduled pg_dump + S3 (SeaweedFS volume) backups (deploy only dumps before each release), README cleanup (references missing `DEPLOYMENT.md` / `docs/LAUNCH_CHECKLIST.md`, inconsistent demo passwords).

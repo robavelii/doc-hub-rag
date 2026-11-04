@@ -15,7 +15,6 @@ echo ""
 echo "=== Frontend typecheck + tests ==="
 cd "$ROOT/frontend/dashboard" && npm run typecheck && npm run test
 cd "$ROOT/frontend/widget" && npm run typecheck
-cd "$ROOT/frontend/admin" && npm run typecheck
 
 echo ""
 echo "All automated tests passed."

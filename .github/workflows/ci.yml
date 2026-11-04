@@ -204,7 +204,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [dashboard, landing, widget, admin]
+        app: [dashboard, landing, widget]
     defaults:
       run:
         working-directory: frontend/${{ matrix.app }}
@@ -230,7 +230,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [backend, dashboard, landing, widget, admin]
+        target: [backend, dashboard, landing, widget]
     steps:
       - uses: actions/checkout@v4
       - name: Build image
