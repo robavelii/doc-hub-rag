@@ -29,7 +29,7 @@ if [[ -f .env.prod ]]; then echo ".env.prod already exists; not overwriting"; rm
 umask 077
 cp .env.prod.template .env.prod && rm .env.prod.template
 # One random value per distinct placeholder, reused wherever it repeats.
-for token in \$(grep -o '__GENERATE[A-Z_]*__' .env.prod | sort -u); do
+for token in \$(grep -o '__GENERATE[A-Z0-9_]*__' .env.prod | sort -u); do
   sed -i "s/\$token/\$(openssl rand -hex 24)/g" .env.prod
 done
 chmod 600 .env.prod
