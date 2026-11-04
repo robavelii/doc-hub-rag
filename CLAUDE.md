@@ -98,6 +98,6 @@ Target: `ubuntu@51.170.178.91` (`ssh -i ~/.ssh/oci_appt_deploy`). Ubuntu 22.04, 
 
 Merged to `main` (all on 2026-11-01): #1 CI gate + CVE upgrades · #2 Phase 0 security/correctness · #3 evals, hybrid search, rerank, citations · #4 structure-aware chunking + 7 formats · #5 collections/groups/permission-aware retrieval · #6 SSO/SCIM via Ory Polis · #7 audit export + retention.
 
-In progress (`feat/deploy-oci-switchable-llm`): switchable chat providers (OpenAI / Gemini / any OpenAI-compatible), OCI deploy (Caddy site, `.env.prod` template, deploy script + workflow).
+Live since 2026-11-04 at https://doc.rfh.et (PR #8: switchable chat providers, SeaweedFS replacing MinIO, OCI deploy). No LLM key configured yet → chat falls back to `mock` until `GEMINI_API_KEY`/`OPENAI_API_KEY` is set in `/opt/doc-hub/.env.prod`. GitHub deploy secrets not set yet (needs a doc-hub-only key in the host's authorized_keys).
 
 Not done yet: scheduled pg_dump + S3 (SeaweedFS volume) backups (deploy only dumps before each release), README cleanup (references missing `DEPLOYMENT.md` / `docs/LAUNCH_CHECKLIST.md`, inconsistent demo passwords), retiring `frontend/admin`.
