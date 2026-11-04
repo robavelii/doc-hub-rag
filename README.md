@@ -379,7 +379,7 @@ backend/app/           FastAPI application
 frontend/shared/       Shared TypeScript types (types.ts)
 frontend/dashboard/    Tenant dashboard (Vite + React + TS)
 frontend/widget/       Embeddable chat widget (Vite IIFE + TS)
-frontend/admin/        Superadmin panel (Vite + React + TS)
+frontend/landing/      Marketing landing page (Vite + React + TS)
 ```
 
 ## TypeScript
@@ -389,7 +389,6 @@ All frontends use strict TypeScript (`tsconfig.base.json`). Shared API types liv
 ```bash
 cd frontend/dashboard && npm run typecheck
 cd frontend/widget && npm run typecheck
-cd frontend/admin && npm run typecheck
 ```
 
 ## Testing
@@ -401,8 +400,8 @@ CI (`.github/workflows/ci.yml`) runs on every pull request and gates merges thro
 | backend · lint + dependency audit | ruff, lockfiles in sync with `requirements*.in`, `pip-audit` (no known CVEs) |
 | backend · unit + security tests | `tests/unit`, `tests/security` with coverage |
 | backend · migrations, integration + e2e | migrate an empty DB, `alembic check` (models match migrations), RLS tests as `app_user`, e2e with inline Celery. Missing services fail instead of skipping (`REQUIRE_SERVICES=1`) |
-| frontend · dashboard/landing/widget/admin | `npm ci`, typecheck, tests, build, `npm audit --audit-level=high` |
-| docker · backend/dashboard/landing/widget/admin | images build; backend image imports the app |
+| frontend · dashboard/landing/widget | `npm ci`, typecheck, tests, build, `npm audit --audit-level=high` |
+| docker · backend/dashboard/landing/widget | images build; backend image imports the app |
 
 ### Dependencies
 
@@ -460,7 +459,6 @@ chmod +x scripts/run_all_tests.sh
 # TypeScript type-check (all apps)
 cd frontend/dashboard && npm run typecheck
 cd frontend/widget && npm run typecheck
-cd frontend/admin && npm run typecheck
 
 # Unit tests (dashboard stream/types)
 cd frontend/dashboard && npm install && npm run test
@@ -468,7 +466,6 @@ cd frontend/dashboard && npm install && npm run test
 # Production builds
 cd frontend/dashboard && npm run build
 cd frontend/widget && npm run build
-cd frontend/admin && npm run build
 ```
 
 ### Manual UI checklist
@@ -480,7 +477,7 @@ cd frontend/admin && npm run build
 | 3 | Chat: "What is Acme refund policy?" | Answer mentions 30-day returns |
 | 4 | Usage page | Token count > 0 after query |
 | 5 | Widget page | Embed code shown |
-| 6 | Admin http://localhost:5174, login as superadmin | Tenant list visible |
+| 6 | Log in to the dashboard as superadmin, open `/admin/tenants` | Tenant list visible |
 | 7 | Register 2nd tenant, upload doc, query | Only own docs visible |
 
 ### Celery note
