@@ -2,6 +2,7 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY tsconfig.base.json ./
 COPY assets ./assets
+COPY shared ./shared
 COPY landing/package.json landing/package-lock.json* ./landing/
 WORKDIR /app/landing
 RUN npm install
