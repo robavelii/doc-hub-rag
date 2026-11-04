@@ -6,7 +6,7 @@ Production-grade multi-tenant SaaS where companies upload knowledge bases and ge
 
 - **Backend:** FastAPI, Celery, SQLAlchemy, Alembic
 - **Vector store:** PostgreSQL + pgvector (tenant-scoped chunks table)
-- **Storage:** MinIO (S3-compatible)
+- **Storage:** SeaweedFS (S3-compatible, Apache-2.0; replaced MinIO, whose community images are discontinued)
 - **Cache/Queue:** Redis
 - **AI:** Pluggable provider layer (mock default, OpenAI optional, Ollama local fallback)
 - **Frontend:** React + Vite + TypeScript (dashboard, landing page, embeddable widget; superadmin routes in dashboard)
@@ -17,7 +17,7 @@ Production-grade multi-tenant SaaS where companies upload knowledge bases and ge
 # 1. Copy environment
 cp .env.example .env
 
-# 2. Start infrastructure (dev mode - DB, Redis, MinIO only)
+# 2. Start infrastructure (dev mode - DB, Redis, SeaweedFS S3 only)
 docker compose -f docker-compose.dev.yml up -d
 
 # 3. Backend setup
@@ -57,13 +57,33 @@ docker compose --profile doc-hub up --build
 | Dashboard | http://localhost:3000 |
 | Landing | http://localhost:8080 |
 | Widget CDN | http://localhost:3002/widget.js |
-| MinIO Console | http://localhost:9001 |
+| S3 (SeaweedFS) | http://localhost:9000 (keys minioadmin/minioadmin) |
 
 Superadmin routes live in the dashboard at `/admin/tenants` and `/admin/usage`.
 
 ## Production deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) and [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md).
+Production runs on a shared OCI host behind its Caddy at https://doc.rfh.et (`/` landing, `/app/` dashboard, `/api/` API, `/widget/widget.js`).
+
+```bash
+scripts/deploy_oci.sh --init-env   # once: writes /opt/doc-hub/.env.prod with generated secrets
+scripts/deploy_oci.sh              # ship HEAD: backup, build, migrate, start, install Caddy site
+```
+
+The `Deploy` GitHub workflow runs the same script after CI passes on `main` (secrets `OCI_SSH_KEY`, `OCI_HOST`, `OCI_KNOWN_HOSTS`). Template for the server env: [deploy/env.prod.example](deploy/env.prod.example). Host rules (other apps share the machine): see CLAUDE.md.
+
+### Switching the chat model
+
+Chat providers are tried in `CHAT_PROVIDER_CHAIN` order; each is enabled by its key:
+
+| Name | Settings |
+|---|---|
+| `openai` | `OPENAI_API_KEY`, `CHAT_MODEL`, optional `OPENAI_BASE_URL` |
+| `gemini` | `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`, `GEMINI_REASONING_EFFORT` |
+| `compatible` | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_CHAT_MODEL` (any OpenAI-compatible API) |
+| `ollama`, `mock` | see below |
+
+Production keeps embeddings local (`EMBEDDING_PROVIDER=local`, 384 dims), so changing the chat provider is an env edit plus `docker compose -p doc-hub … up -d` with no re-indexing.
 
 ## Demo Credentials
 
@@ -118,7 +138,7 @@ curl http://localhost:8000/health
 
 **Option A — Dashboard UI**
 
-1. Start all services (Postgres, Redis, MinIO, backend, Celery worker, dashboard).
+1. Start all services (Postgres, Redis, SeaweedFS, backend, Celery worker, dashboard).
 2. Register a new tenant or log in as `demo@acme.com` / `demo123`.
 3. Go to **Documents** → upload a PDF, DOCX, or TXT (e.g. a company FAQ or product spec).
 4. Wait for status **ready** (requires Celery worker; check Documents page).

@@ -18,7 +18,9 @@ COPY . .
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+# /models holds the local embedding/reranker models (LOCAL_MODEL_CACHE_DIR); a named
+# volume mounted there inherits this ownership, so models download once per host.
+RUN useradd --create-home --uid 10001 appuser && mkdir -p /models && chown -R appuser:appuser /app /models
 USER appuser
 
 EXPOSE 8000
