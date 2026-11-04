@@ -50,8 +50,10 @@ export default function Widget() {
     }
   }
 
-  const widgetCdn = import.meta.env.VITE_WIDGET_CDN_URL || 'http://localhost:3002/widget.js'
-  const apiBase = window.location.origin.includes('localhost') ? 'http://localhost:8000' : `${window.location.origin}/api`.replace('/api', '')
+  // In production the API sits under /api and the widget under /widget on the same origin (deploy/caddy)
+  const isLocal = window.location.hostname === 'localhost'
+  const widgetCdn = import.meta.env.VITE_WIDGET_CDN_URL || (isLocal ? 'http://localhost:3002/widget.js' : `${window.location.origin}/widget/widget.js`)
+  const apiBase = isLocal ? 'http://localhost:8000' : `${window.location.origin}/api`
   const embedCode = `<!-- Doc-Hub Widget -->
 <div id="my-assistant"></div>
 <script src="${widgetCdn}"></script>

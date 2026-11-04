@@ -1,33 +1,345 @@
-@import '../../assets/brand/brand.css';
+/* Hallmark · shape: Workbench (draw fa72c8) · genre: modern-minimal · theme: Coral (deal 1/3, seed private-assistant-answers-from-f89e·c4a63c99·2026-11-04·r0) · redesign: full
+ * hero: Stage (swapped from Corridor: the signature has to be on the first screen) · nav: edge-aligned · footer: letter close · signature: an answer sheet whose citations point at a source card pressed "Cited"
+ * axes: light/grotesk-sans/warm · posture: restrained · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S5 R4 V4 · weakest: E (no customer proof exists, so the page argues with the product itself: the built answer, the real dashboard, the real price table) */
+@import '../../shared/design/tokens.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  background: var(--brand-bg);
-  color: var(--brand-text);
-  font-family: 'Inter', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* Coral stationery: one light from the left, every shadow falls right */
+:root {
+  --shade: 32% 0.03 50;
+  --lit: 100% 0.005 80;
+  --edge-stock: inset 0 1px 0 oklch(var(--lit) / 0.9), inset 0 -1px 0 oklch(var(--shade) / 0.07), 0 0 0 0.5px oklch(var(--shade) / 0.22), 0 1px 0 oklch(var(--shade) / 0.12);
+  --cast-stock: 6px 5px 10px -6px oklch(var(--shade) / 0.3);
+  --cast-stock-lift: 12px 10px 18px -8px oklch(var(--shade) / 0.3);
+  --cast-sheet: 18px 16px 34px -14px oklch(var(--shade) / 0.32);
+  --desk: oklch(94.3% 0.008 64);
+  --cotton: oklch(98.8% 0.0045 80);
+  --print: oklch(23% 0.012 38);
+  --board: oklch(22% 0.011 40);
+  --board-type: oklch(96.5% 0.006 70);
+  --board-hover: oklch(30% 0.013 40);
+  --paid: oklch(55.5% 0.15 33);
+  --tex-cotton: url('/cotton.svg');
+  --tex-felt: url('/felt.svg');
+
+  --text-display: clamp(2.75rem, 1.4rem + 4.2vw, 5.25rem);
+  --text-section: clamp(2.125rem, 1.5rem + 2vw, 3.25rem);
+  --text-title: clamp(1.25rem, 1.1rem + 0.5vw, 1.5625rem);
+  --text-lead: clamp(1.125rem, 1.05rem + 0.3vw, 1.3125rem);
+
+  --container: 1440px;
+  --gutter: clamp(16px, 4.4vw, 64px);
+  --section-gap-s: clamp(80px, 8vw, 120px);
+  --section-gap: clamp(96px, 10vw, 144px);
 }
 
-.mesh-bg {
-  background:
-    radial-gradient(at 20% 20%, rgba(29, 216, 155, 0.08) 0%, transparent 50%),
-    radial-gradient(at 80% 80%, rgba(96, 165, 250, 0.06) 0%, transparent 50%),
-    var(--brand-bg);
+@layer base {
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 88px;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    background-color: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background-color: oklch(var(--c-accent) / 0.2);
+  }
 }
 
-.glass {
-  background: var(--brand-glass-bg);
-  backdrop-filter: blur(var(--brand-glass-blur));
-  border: 1px solid var(--brand-glass-border);
+@layer components {
+  .container {
+    width: 100%;
+    max-width: var(--container);
+    margin-inline: auto;
+    padding-inline: var(--gutter);
+  }
+
+  .display {
+    font-size: var(--text-display);
+    line-height: 1.02;
+  }
+
+  .section-head {
+    font-size: var(--text-section);
+    line-height: 1.06;
+  }
+
+  .item-title {
+    font-size: var(--text-title);
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  .lead {
+    font-size: var(--text-lead);
+    line-height: 1.5;
+  }
+
+  /* Paper objects */
+  .desk {
+    background-color: var(--desk);
+    background-image: radial-gradient(90% 120% at 0% 30%, var(--cotton), transparent 62%), var(--tex-felt);
+  }
+
+  .stock {
+    background-color: var(--cotton);
+    background-image: linear-gradient(100deg, var(--cotton), transparent 45%), var(--tex-cotton);
+    color: var(--print);
+    box-shadow: var(--edge-stock), var(--cast-stock);
+  }
+
+  .sheet {
+    box-shadow: var(--edge-stock), var(--cast-sheet);
+  }
+
+  /* Letterpress card controls: cotton for the secondary, ink board for the primary */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    padding: 0 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: transform var(--dur-short) var(--ease-out), box-shadow var(--dur-short) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+  }
+
+  .btn-card {
+    background-color: var(--cotton);
+    background-image: var(--tex-cotton);
+    color: var(--print);
+    text-shadow: 0.5px 0.75px 0 var(--cotton);
+    box-shadow: var(--edge-stock), var(--cast-stock);
+  }
+
+  .btn-ink {
+    background-color: var(--board);
+    color: var(--board-type);
+    text-shadow: 0 -0.75px 0 oklch(var(--c-text));
+    box-shadow: var(--cast-stock);
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--edge-stock), var(--cast-stock-lift);
+  }
+
+  .btn-ink:hover {
+    background-color: var(--board-hover);
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--edge-stock);
+  }
+
+  .btn-sm {
+    min-height: 44px;
+    padding: 0 1rem;
+    font-size: 0.875rem;
+  }
+
+  .link {
+    text-decoration: underline;
+    text-decoration-color: oklch(var(--c-border-strong));
+    text-underline-offset: 4px;
+    transition: text-decoration-color var(--dur-micro) var(--ease-out);
+  }
+
+  .link:hover {
+    text-decoration-color: var(--accent);
+  }
+
+  .nav-link {
+    border-radius: 6px;
+    padding: 0.375rem 0.25rem;
+    color: oklch(var(--c-text-secondary));
+    transition: color var(--dur-micro) var(--ease-out);
+  }
+
+  .nav-link:hover {
+    color: var(--text);
+  }
+
+  .cite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15em;
+    height: 1.15em;
+    margin-inline: 0.15em;
+    padding-inline: 0.25em;
+    border-radius: 5px;
+    background: oklch(var(--c-accent-soft));
+    color: var(--accent);
+    font-size: 0.72em;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: 0.18em;
+  }
+
+  .passage-mark {
+    background: linear-gradient(transparent 58%, oklch(var(--c-accent) / 0.22) 58%);
+    color: var(--print);
+  }
+
+  /* The settled state, pressed into the card in uneven coral ink */
+  .pressed {
+    color: var(--paid);
+    border: 2px solid currentColor;
+    border-radius: 6px;
+    padding: 0.1em 0.45em 0.15em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transform: rotate(-6deg);
+    filter: url('#press');
+    opacity: 0.88;
+  }
+
+  .code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.75;
+  }
+
+  .code .tok-tag {
+    color: oklch(var(--c-muted));
+  }
+
+  .code .tok-str {
+    color: var(--accent);
+  }
+
+  .price-table th,
+  .price-table td {
+    padding-block: 1.25rem;
+    vertical-align: middle;
+  }
+
+  .price-table tbody tr + tr {
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 47.99rem) {
+    .price-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+
+    .price-table tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.25rem 1rem;
+      padding-block: 1.25rem;
+    }
+
+    .price-table td {
+      padding: 0;
+    }
+
+    .price-table td[data-label] {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      color: oklch(var(--c-text-secondary));
+    }
+
+    .price-table td[data-label]::before {
+      content: attr(data-label);
+      color: oklch(var(--c-muted));
+    }
+
+    .price-table td.price-action {
+      grid-column: 1 / -1;
+      margin-top: 0.75rem;
+    }
+  }
 }
 
-.gradient-text {
-  background: var(--brand-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* The one reveal: the answer is written, then its source card is laid down and pressed.
+   Without motion (or before CSS animations run) the finished desk is what shows. */
+@media (prefers-reduced-motion: no-preference) {
+  .play-line {
+    animation: rise 520ms var(--ease-out) both;
+    animation-delay: calc(300ms + var(--i, 0) * 260ms);
+  }
+
+  .play-card {
+    animation: lay 760ms var(--ease-out) both;
+    animation-delay: 1700ms;
+  }
+
+  .play-press {
+    animation: press 360ms var(--ease-out) both;
+    animation-delay: 2500ms;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes lay {
+    from { opacity: 0; transform: translate(36px, 24px) rotate(4deg); }
+    to { opacity: 1; transform: rotate(-2deg); }
+  }
+
+  @keyframes press {
+    from { opacity: 0; transform: rotate(-6deg) scale(1.35); }
+    to { opacity: 0.88; transform: rotate(-6deg) scale(1); }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .btn {
+    transition: none;
+  }
 }

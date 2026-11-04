@@ -11,5 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 8080,
+    // tokens and fonts live in ../shared/design
+    fs: { allow: ['..'] },
   },
 })

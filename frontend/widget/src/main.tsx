@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import Widget from './Widget'
-import './widget.css'
+import css from './widget.css?inline'
 import type { WidgetInitOptions } from '@shared/types'
 
 interface WidgetConfigResponse {
@@ -23,7 +23,7 @@ async function fetchWidgetConfig(apiKey: string, apiBase: string): Promise<Widge
 }
 
 window.RAGWidget = {
-  async init({ apiKey, containerId, primaryColor = '#1D9E75', apiBase = 'http://localhost:8000' }: WidgetInitOptions) {
+  async init({ apiKey, containerId, primaryColor = '#221C19', apiBase = 'http://localhost:8000' }: WidgetInitOptions) {
     const container = document.getElementById(containerId)
     if (!container) {
       console.error(`RAGWidget: no element with id "${containerId}"`)
@@ -31,7 +31,15 @@ window.RAGWidget = {
     }
 
     const config = await fetchWidgetConfig(apiKey, apiBase)
-    createRoot(container).render(
+    // A shadow root keeps the host page's CSS out and ours in; the stylesheet travels inside widget.js
+    const shadow = container.shadowRoot ?? container.attachShadow({ mode: 'open' })
+    shadow.replaceChildren()
+    const style = document.createElement('style')
+    style.textContent = css
+    const mount = document.createElement('div')
+    mount.setAttribute('data-theme', 'doc-hub')
+    shadow.append(style, mount)
+    createRoot(mount).render(
       <Widget
         apiKey={apiKey}
         primaryColor={config.primary_color ?? primaryColor}
