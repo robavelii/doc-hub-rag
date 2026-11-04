@@ -14,9 +14,12 @@ doc.rfh.et {
 		max_size 50MB
 	}
 
-	# Prometheus metrics stay private (scrape on 127.0.0.1:8100/metrics).
-	@metrics path /api/metrics /api/metrics/*
-	respond @metrics 404
+	# Prometheus metrics stay private (scrape on 127.0.0.1:8100/metrics). A handle block,
+	# not a bare respond: handle/handle_path run before respond, and the longer path
+	# sorts ahead of /api/*.
+	handle /api/metrics* {
+		respond 404
+	}
 
 	# API. handle_path strips /api, as the dashboard and widget expect.
 	# Server-sent events (/query/stream) are flushed immediately by Caddy.
