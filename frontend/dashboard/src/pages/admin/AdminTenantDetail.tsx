@@ -38,7 +38,7 @@ export default function AdminTenantDetail() {
       <Link to="/admin/tenants" className="text-sm text-brand hover:underline">
         ← Back to tenants
       </Link>
-      <h1 className="text-2xl font-bold mt-4 mb-6">{tenant.name}</h1>
+      <h1 className="text-2xl font-semibold mt-4 mb-6">{tenant.name}</h1>
       <Card className="p-6 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>

@@ -43,9 +43,7 @@ export function Tooltip({ content, children, side = 'top', className }: TooltipP
       {show && (
         <div
           className={cn(
-            'absolute z-50 px-2.5 py-1.5 text-xs font-medium rounded-lg whitespace-nowrap pointer-events-none',
-            'glass text-text shadow-md',
-            'animate-fade-in',
+            'pointer-events-none absolute z-50 whitespace-nowrap rounded-md bg-text px-2 py-1 text-xs font-medium text-bg shadow-md',
             positionStyles[side]
           )}
           role="tooltip"

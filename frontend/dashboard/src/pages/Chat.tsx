@@ -1,51 +1,92 @@
-import { useCallback, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import type { ConversationDetail } from '@shared/types'
 import api from '../lib/api'
 import ChatThread from '../components/ChatThread'
-import ConversationSidebar from '../components/ConversationSidebar'
+import { Button, Skeleton } from '../components/ui'
+import { useConversationStore } from '../store/conversationStore'
+
+interface ThreadState {
+  key: string
+  status: 'loading' | 'ready' | 'error'
+  messages: ConversationDetail['messages']
+}
 
 export default function Chat() {
-  const [conversationId, setConversationId] = useState<string | null>(null)
-  const [initialMessages, setInitialMessages] = useState<ConversationDetail['messages']>([])
-  const [threadKey, setThreadKey] = useState(0)
+  const { conversationId } = useParams()
+  const navigate = useNavigate()
+  const reloadList = useConversationStore((s) => s.load)
+  const [thread, setThread] = useState<ThreadState>({ key: 'new', status: 'ready', messages: [] })
+  const [attempt, setAttempt] = useState(0)
+  // Set when the open thread has just created this conversation, so the URL update
+  // that follows does not reload (and remount) the thread mid-stream.
+  const createdHere = useRef<string | null>(null)
 
-  const handleSelect = useCallback(async (id: string | null) => {
-    setConversationId(id)
-    if (!id) {
-      setInitialMessages([])
-      setThreadKey((k) => k + 1)
+  useEffect(() => {
+    if (!conversationId) {
+      setThread({ key: `new-${Date.now()}`, status: 'ready', messages: [] })
       return
     }
-    const { data } = await api.get<ConversationDetail>(`/conversations/${id}`)
-    setInitialMessages(data.messages)
-    setThreadKey((k) => k + 1)
-  }, [])
-
-  const handleNew = () => {
-    setConversationId(null)
-    setInitialMessages([])
-    setThreadKey((k) => k + 1)
-  }
+    if (createdHere.current === conversationId) {
+      createdHere.current = null
+      return
+    }
+    let cancelled = false
+    setThread({ key: conversationId, status: 'loading', messages: [] })
+    api
+      .get<ConversationDetail>(`/conversations/${conversationId}`)
+      .then(({ data }) => {
+        if (!cancelled) setThread({ key: conversationId, status: 'ready', messages: data.messages })
+      })
+      .catch(() => {
+        if (!cancelled) setThread({ key: conversationId, status: 'error', messages: [] })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [conversationId, attempt])
 
   const handleConversationCreated = (id: string) => {
-    setConversationId(id)
+    createdHere.current = id
+    void reloadList()
+    navigate(`/chat/${id}`, { replace: true })
+  }
+
+  if (thread.status === 'loading') {
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 pt-4" aria-label="Loading conversation">
+        <Skeleton width="45%" height={36} className="ml-auto rounded-3xl" />
+        <div className="space-y-2.5">
+          <Skeleton width="20%" />
+          <Skeleton width="95%" />
+          <Skeleton width="88%" />
+          <Skeleton width="60%" />
+        </div>
+      </div>
+    )
+  }
+
+  if (thread.status === 'error') {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="text-[15px] text-text">This conversation could not be loaded.</p>
+        <p className="text-sm text-muted">It may have been deleted, or the server is unreachable.</p>
+        <div className="mt-2 flex gap-2">
+          <Button variant="secondary" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </Button>
+          <Button onClick={() => navigate('/chat')}>New chat</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] -m-4 lg:-m-6 rounded-xl overflow-hidden border border-border-subtle">
-      <ConversationSidebar
-        activeId={conversationId}
-        onSelect={(id) => void handleSelect(id)}
-        onNew={handleNew}
-      />
-      <div className="flex-1 p-4 lg:p-6 overflow-hidden">
-        <ChatThread
-          key={threadKey}
-          conversationId={conversationId}
-          initialMessages={initialMessages}
-          onConversationCreated={handleConversationCreated}
-        />
-      </div>
-    </div>
+    <ChatThread
+      key={thread.key}
+      conversationId={conversationId ?? null}
+      initialMessages={thread.messages}
+      onConversationCreated={handleConversationCreated}
+    />
   )
 }

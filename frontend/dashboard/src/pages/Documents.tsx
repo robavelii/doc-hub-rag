@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { File, Grid, List, RefreshCw, Trash2 } from 'lucide-react'
+import { File, FileSpreadsheet, FileText, Globe, Grid, List, Mail, Presentation, RefreshCw, Trash2, type LucideIcon } from 'lucide-react'
 import type { DocumentItem } from '@shared/types'
 import api from '../lib/api'
 import UploadZone from '../components/UploadZone'
@@ -13,8 +13,13 @@ import type { UsageSummary } from '@shared/types'
 type ViewMode = 'list' | 'grid'
 type SortKey = 'filename' | 'created_at' | 'status' | 'size_bytes'
 
-const FILE_ICONS: Record<string, string> = {
-  pdf: '📕', docx: '📘', pptx: '📙', xlsx: '📗', csv: '📗', md: '📝', html: '🌐', eml: '✉️', txt: '📄', url: '🔗',
+const FILE_ICONS: Record<string, LucideIcon> = {
+  pdf: FileText, docx: FileText, md: FileText, txt: FileText, pptx: Presentation, xlsx: FileSpreadsheet, csv: FileSpreadsheet, html: Globe, url: Globe, eml: Mail,
+}
+
+function FileTypeIcon({ type, size = 16 }: { type: string; size?: number }) {
+  const Icon = FILE_ICONS[type] ?? File
+  return <Icon size={size} className="shrink-0 text-muted" aria-hidden="true" />
 }
 
 export default function Documents() {
@@ -100,10 +105,10 @@ export default function Documents() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Documents</h1>
+      <h1 className="text-2xl font-semibold mb-4">Documents</h1>
       {usage && (
         <div className="mb-6">
-          <UsageBar label="Storage" used={usage.storage_used_bytes} limit={usage.storage_limit_bytes} />
+          <UsageBar label="Storage" unit="bytes" used={usage.storage_used_bytes} limit={usage.storage_limit_bytes} />
         </div>
       )}
       {canEdit && <UploadZone onUploadComplete={() => void loadDocs()} />}
@@ -143,10 +148,10 @@ export default function Documents() {
         ) : view === 'grid' ? (
           <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((d) => (
-              <div key={d.id} className="glass rounded-xl p-4 cursor-pointer hover:border-primary/30" onClick={() => setDetailId(d.id)}>
+              <div key={d.id} className="cursor-pointer rounded-xl border border-border bg-surface p-4 shadow-sm transition-colors duration-micro hover:border-border-strong" onClick={() => setDetailId(d.id)}>
                 <div className="flex items-start gap-3">
                   <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggleSelect(d.id)} onClick={(e) => e.stopPropagation()} />
-                  <span className="text-2xl">{FILE_ICONS[d.file_type] ?? <File size={20} />}</span>
+                  <FileTypeIcon type={d.file_type} size={20} />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{d.filename}</p>
                     <DocStatusBadge status={d.status} />
@@ -169,11 +174,13 @@ export default function Documents() {
               </thead>
               <tbody>
                 {filtered.map((d) => (
-                  <tr key={d.id} className="border-b border-border last:border-0 hover:bg-surface-2/30">
+                  <tr key={d.id} className="border-b border-border last:border-0 hover:bg-primary-muted">
                     <td className="py-3 px-4"><input type="checkbox" checked={selected.has(d.id)} onChange={() => toggleSelect(d.id)} /></td>
                     <td className="py-3 pr-4 cursor-pointer" onClick={() => setDetailId(d.id)}>
-                      <span className="mr-2">{FILE_ICONS[d.file_type] ?? '📄'}</span>
-                      <span className="font-medium">{d.filename}</span>
+                      <span className="inline-flex items-center gap-2">
+                        <FileTypeIcon type={d.file_type} />
+                        <span className="font-medium">{d.filename}</span>
+                      </span>
                     </td>
                     <td className="py-3 pr-4"><DocStatusBadge status={d.status} /></td>
                     <td className="py-3 pr-4 text-muted">{d.chunk_count}</td>

@@ -36,28 +36,29 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="glass max-w-md w-full rounded-2xl p-6 animate-scale-in relative">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-scrim/45 p-4 animate-fade-in">
+      <div role="dialog" aria-modal="true" aria-labelledby="onboarding-title" className="relative w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-lg">
         <button
           onClick={finish}
-          className="absolute top-4 right-4 p-1 rounded-md text-muted hover:text-text"
+          type="button"
+          className="absolute right-4 top-4 rounded-md p-1 text-muted transition-colors duration-micro hover:bg-primary-muted hover:text-text"
           aria-label="Dismiss"
         >
           <X size={18} />
         </button>
         <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-muted">
-            <Icon size={20} className="text-primary" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-3 text-text" aria-hidden="true">
+            <Icon size={20} />
           </div>
           <div>
             <p className="text-xs text-muted">Step {step + 1} of {STEPS.length}</p>
-            <h3 className="font-semibold text-text">{current.title}</h3>
+            <h3 id="onboarding-title" className="font-semibold text-text">{current.title}</h3>
           </div>
         </div>
         <p className="text-sm text-muted mb-6">{current.desc}</p>
         <div className="flex gap-2 mb-4">
           {STEPS.map((_, i) => (
-            <div key={i} className={`h-1 flex-1 rounded-full ${i <= step ? 'bg-primary' : 'bg-border'}`} />
+            <div key={i} className={`h-1 flex-1 rounded-full ${i <= step ? 'bg-primary' : 'bg-surface-3'}`} />
           ))}
         </div>
         <div className="flex gap-2">

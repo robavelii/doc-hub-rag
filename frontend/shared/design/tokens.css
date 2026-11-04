@@ -1,0 +1,116 @@
+/* Doc-Hub design tokens, shared by dashboard and landing.
+ * Colours are bare oklch channels so Tailwind can apply opacity (`bg-ink/10`);
+ * the `--<name>` twins below are complete colours for raw CSS and chart props.
+ * General Sans is self-hosted (ITF Free Font License, fontshare.com). */
+
+@font-face { font-family: 'General Sans'; src: url('./fonts/general-sans-400.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'General Sans'; src: url('./fonts/general-sans-500.woff2') format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'General Sans'; src: url('./fonts/general-sans-600.woff2') format('woff2'); font-weight: 600; font-style: normal; font-display: swap; }
+
+:root {
+  color-scheme: light;
+
+  /* Paper: warm grey ground, a darker second neutral for the sidebar, white-ish cotton for raised surfaces */
+  --c-bg: 97% 0.006 55;
+  --c-sidebar: 94.5% 0.007 55;
+  --c-surface: 98.8% 0.0045 80;
+  --c-surface-2: 94.5% 0.007 55;
+  --c-surface-3: 91.5% 0.009 55;
+  --c-border: 87% 0.009 55;
+  --c-border-strong: 81% 0.011 55;
+  --c-field: 58% 0.012 50;
+
+  /* Ink */
+  --c-text: 21% 0.012 38;
+  --c-text-secondary: 34% 0.013 40;
+  --c-muted: 47% 0.013 45;
+
+  /* Primary actions are ink, not colour; coral is spent on focus, links and citations */
+  --c-primary: 21% 0.012 38;
+  --c-primary-hover: 29% 0.013 40;
+  --c-primary-fg: 97% 0.006 55;
+  --c-accent: 54% 0.165 32;
+  --c-accent-soft: 93% 0.03 40;
+  --c-focus: 54% 0.17 32;
+
+  /* Status: kept apart from the coral accent by hue and chroma */
+  --c-success: 50% 0.11 152;
+  --c-warning: 58% 0.12 72;
+  --c-danger: 50% 0.19 18;
+  --c-info: 45% 0.02 60;
+
+  --c-scrim: 16% 0.01 40;
+
+  --c-chart-1: 21% 0.012 38;
+  --c-chart-2: 62% 0.15 34;
+  --c-chart-3: 66% 0.02 55;
+
+  --shadow-sm: 0 1px 2px oklch(20% 0.01 35 / 0.06);
+  --shadow-md: 0 1px 2px oklch(20% 0.01 35 / 0.05), 0 6px 16px -6px oklch(20% 0.01 35 / 0.14);
+  --shadow-lg: 0 2px 4px oklch(20% 0.01 35 / 0.05), 0 18px 40px -12px oklch(20% 0.01 35 / 0.22);
+
+  --font-sans: 'General Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+}
+
+/* Dark is warm graphite, never blue-black */
+:root.dark {
+  color-scheme: dark;
+  --c-bg: 19.5% 0.008 50;
+  --c-sidebar: 16.5% 0.007 50;
+  --c-surface: 23% 0.009 50;
+  --c-surface-2: 25.5% 0.01 50;
+  --c-surface-3: 29% 0.011 50;
+  --c-border: 30% 0.01 50;
+  --c-border-strong: 37% 0.012 50;
+  --c-field: 54% 0.012 50;
+
+  --c-text: 94% 0.006 70;
+  --c-text-secondary: 84% 0.008 65;
+  --c-muted: 70% 0.012 60;
+
+  --c-primary: 94% 0.006 70;
+  --c-primary-hover: 86% 0.008 65;
+  --c-primary-fg: 19.5% 0.008 50;
+  --c-accent: 74% 0.13 36;
+  --c-accent-soft: 32% 0.05 36;
+  --c-focus: 74% 0.13 36;
+
+  --c-success: 74% 0.12 152;
+  --c-warning: 80% 0.12 80;
+  --c-danger: 70% 0.16 20;
+  --c-info: 78% 0.015 60;
+
+  --c-chart-1: 90% 0.008 65;
+  --c-chart-2: 72% 0.14 36;
+  --c-chart-3: 55% 0.015 55;
+
+  --shadow-sm: 0 1px 2px oklch(5% 0.01 40 / 0.4);
+  --shadow-md: 0 1px 2px oklch(5% 0.01 40 / 0.35), 0 8px 20px -8px oklch(5% 0.01 40 / 0.6);
+  --shadow-lg: 0 2px 4px oklch(5% 0.01 40 / 0.35), 0 20px 44px -12px oklch(5% 0.01 40 / 0.7);
+}
+
+:root {
+  --bg: oklch(var(--c-bg));
+  --sidebar: oklch(var(--c-sidebar));
+  --surface: oklch(var(--c-surface));
+  --surface-2: oklch(var(--c-surface-2));
+  --border: oklch(var(--c-border));
+  --text: oklch(var(--c-text));
+  --muted: oklch(var(--c-muted));
+  --primary: oklch(var(--c-primary));
+  --accent: oklch(var(--c-accent));
+  --focus: oklch(var(--c-focus));
+  --primary-muted: oklch(var(--c-primary) / 0.07);
+  --success: oklch(var(--c-success));
+  --warning: oklch(var(--c-warning));
+  --danger: oklch(var(--c-danger));
+  --info: oklch(var(--c-info));
+  --chart-1: oklch(var(--c-chart-1));
+  --chart-2: oklch(var(--c-chart-2));
+  --chart-3: oklch(var(--c-chart-3));
+}

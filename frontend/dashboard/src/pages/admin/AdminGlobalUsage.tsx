@@ -4,7 +4,7 @@ import type { AdminTenant, GlobalUsageStats } from '@shared/types'
 import api from '../../lib/api'
 import { Card, CardHeader, CardTitle, Skeleton } from '../../components/ui'
 
-const PLAN_COLORS = ['#6b7d96', '#1dd89b', '#60a5fa']
+const PLAN_COLORS = ['var(--chart-3)', 'var(--chart-1)', 'var(--chart-2)']
 
 export default function AdminGlobalUsage() {
   const [stats, setStats] = useState<GlobalUsageStats | null>(null)
@@ -39,12 +39,12 @@ export default function AdminGlobalUsage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Admin — Global Usage</h1>
+      <h1 className="text-2xl font-semibold mb-6">Admin: global usage</h1>
       <div className="grid gap-4 sm:grid-cols-4 mb-8">
-        <Card className="p-4"><p className="text-xs text-muted">Total tokens</p><p className="text-2xl font-bold">{(stats?.total_tokens_this_month ?? 0).toLocaleString()}</p></Card>
-        <Card className="p-4"><p className="text-xs text-muted">Tenants</p><p className="text-2xl font-bold">{stats?.total_tenants ?? 0}</p></Card>
-        <Card className="p-4"><p className="text-xs text-muted">Active</p><p className="text-2xl font-bold text-success">{active}</p></Card>
-        <Card className="p-4"><p className="text-xs text-muted">Suspended</p><p className="text-2xl font-bold text-danger">{suspended}</p></Card>
+        <Card className="p-4"><p className="text-xs text-muted">Total tokens</p><p className="text-2xl font-semibold">{(stats?.total_tokens_this_month ?? 0).toLocaleString()}</p></Card>
+        <Card className="p-4"><p className="text-xs text-muted">Tenants</p><p className="text-2xl font-semibold">{stats?.total_tenants ?? 0}</p></Card>
+        <Card className="p-4"><p className="text-xs text-muted">Active</p><p className="text-2xl font-semibold text-success">{active}</p></Card>
+        <Card className="p-4"><p className="text-xs text-muted">Suspended</p><p className="text-2xl font-semibold text-danger">{suspended}</p></Card>
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

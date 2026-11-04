@@ -1,92 +1,133 @@
-import { useEffect, useState } from 'react'
-import { MessageSquarePlus, Search, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { NavLink, useMatch, useNavigate } from 'react-router-dom'
+import { Search, Trash2 } from 'lucide-react'
 import type { ConversationSummary } from '@shared/types'
-import api from '../lib/api'
-import { Button, EmptyState, Input, Skeleton, useToast } from './ui'
+import { useConversationStore } from '../store/conversationStore'
+import { Skeleton, useToast } from './ui'
 import { cn } from '../lib/cn'
 
 interface Props {
-  activeId: string | null
-  onSelect: (id: string | null) => void
-  onNew: () => void
+  onNavigate?: () => void
 }
 
-export default function ConversationSidebar({ activeId, onSelect, onNew }: Props) {
-  const [conversations, setConversations] = useState<ConversationSummary[]>([])
-  const [loading, setLoading] = useState(true)
+const DAY = 24 * 60 * 60 * 1000
+
+function groupLabel(iso: string | null | undefined, now: number): string {
+  if (!iso) return 'Older'
+  const age = now - new Date(iso).getTime()
+  if (age < DAY) return 'Today'
+  if (age < 2 * DAY) return 'Yesterday'
+  if (age < 7 * DAY) return 'Previous 7 days'
+  if (age < 30 * DAY) return 'Previous 30 days'
+  return 'Older'
+}
+
+function groupConversations(list: ConversationSummary[]) {
+  const now = Date.now()
+  const groups: { label: string; items: ConversationSummary[] }[] = []
+  for (const c of list) {
+    const label = groupLabel(c.updated_at ?? c.created_at, now)
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) last.items.push(c)
+    else groups.push({ label, items: [c] })
+  }
+  return groups
+}
+
+export default function ConversationSidebar({ onNavigate }: Props) {
+  const { conversations, status, load, remove } = useConversationStore()
   const [search, setSearch] = useState('')
+  const conversationId = useMatch('/chat/:conversationId')?.params.conversationId
+  const navigate = useNavigate()
   const { toast } = useToast()
 
-  const load = async () => {
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const handleDelete = async (c: ConversationSummary) => {
     try {
-      const { data } = await api.get<ConversationSummary[]>('/conversations')
-      setConversations(data)
+      await remove(c.id)
+      if (conversationId === c.id) navigate('/chat')
+      toast('success', 'Conversation deleted')
     } catch {
-      toast('error', 'Failed to load conversations')
-    } finally {
-      setLoading(false)
+      toast('error', 'Could not delete the conversation')
     }
   }
 
-  useEffect(() => { void load() }, [])
-
-  const handleDelete = async (id: string) => {
-    await api.delete(`/conversations/${id}`)
-    setConversations((prev) => prev.filter((c) => c.id !== id))
-    if (activeId === id) onSelect(null)
-    toast('success', 'Conversation deleted')
-  }
-
-  const filtered = conversations.filter((c) =>
-    c.title.toLowerCase().includes(search.toLowerCase())
+  const groups = useMemo(
+    () => groupConversations(conversations.filter((c) => c.title.toLowerCase().includes(search.toLowerCase()))),
+    [conversations, search]
   )
 
   return (
-    <div className="flex h-full w-64 shrink-0 flex-col border-r border-border-subtle max-md:absolute max-md:z-20 max-md:h-full max-md:bg-surface">
-      <div className="p-3 border-b border-border-subtle">
-        <Button onClick={onNew} className="w-full" size="sm">
-          <MessageSquarePlus size={16} />
-          New Chat
-        </Button>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="px-2 pb-2">
+        <label className="relative block">
+          <span className="sr-only">Search conversations</span>
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search"
+            className="h-8 w-full rounded-lg border border-transparent bg-transparent pl-8 pr-2 text-sm text-text placeholder:text-muted hover:bg-primary-muted focus:border-border focus:bg-surface"
+          />
+        </label>
       </div>
-      <div className="p-3">
-        <Input
-          placeholder="Search..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          icon={<Search size={14} />}
-        />
-      </div>
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
-        {loading ? (
-          <div className="space-y-2 p-2">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        {status === 'loading' && (
+          <div className="space-y-2 px-2 pt-2" aria-label="Loading conversations">
+            {[70, 55, 80, 60].map((w) => <Skeleton key={w} width={`${w}%`} height={14} />)}
           </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState title="No conversations" description="Start a new chat to begin" />
-        ) : (
-          filtered.map((c) => (
-            <div
-              key={c.id}
-              className={cn(
-                'group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition',
-                activeId === c.id ? 'bg-primary-muted text-primary' : 'text-muted hover:bg-surface-2/50 hover:text-text'
-              )}
-            >
-              <button type="button" onClick={() => onSelect(c.id)} className="truncate flex-1 text-left">
-                {c.title}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDelete(c.id)}
-                className="opacity-0 group-hover:opacity-100 p-1 text-muted hover:text-danger"
-                aria-label={`Delete conversation ${c.title}`}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))
         )}
+
+        {status === 'error' && (
+          <div className="px-2 pt-2 text-sm text-muted">
+            <p>Could not load your conversations.</p>
+            <button type="button" onClick={() => void load()} className="mt-1 font-medium text-text underline underline-offset-2 hover:text-accent">
+              Try again
+            </button>
+          </div>
+        )}
+
+        {status === 'ready' && groups.length === 0 && (
+          <p className="px-2 pt-2 text-sm text-muted">
+            {search ? 'No conversations match.' : 'Your conversations will appear here.'}
+          </p>
+        )}
+
+        {groups.map((g) => (
+          <section key={g.label} className="mt-3 first:mt-1">
+            <h3 className="px-2 pb-1 text-xs font-medium text-muted">{g.label}</h3>
+            <ul>
+              {g.items.map((c) => (
+                <li key={c.id} className="group relative">
+                  <NavLink
+                    to={`/chat/${c.id}`}
+                    onClick={onNavigate}
+                    className={({ isActive }) =>
+                      cn(
+                        'block truncate rounded-lg py-1.5 pl-2 pr-8 text-sm transition-colors duration-micro',
+                        isActive ? 'bg-primary-muted font-medium text-text' : 'text-text-secondary hover:bg-primary-muted hover:text-text'
+                      )
+                    }
+                  >
+                    {c.title}
+                  </NavLink>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(c)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted opacity-0 transition-opacity duration-micro hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                    aria-label={`Delete conversation ${c.title}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </div>
   )

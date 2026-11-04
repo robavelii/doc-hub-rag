@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { QuerySource } from '@shared/types'
-import { cn } from '../lib/cn'
 
 interface CitationPillProps {
   chunkId: string
@@ -10,16 +9,13 @@ interface CitationPillProps {
 
 export default function CitationPill({ chunkId, source, refNum }: CitationPillProps) {
   const [showPopover, setShowPopover] = useState(false)
-  const label = refNum != null ? `[${refNum}]` : `[${source?.filename || 'source'}]`
+  const label = refNum != null ? String(refNum) : source?.filename || 'source'
 
   return (
-    <span className="relative inline-block align-baseline mx-0.5">
+    <span className="relative mx-0.5 inline-block align-[0.12em]">
       <button
         type="button"
-        className={cn(
-          'inline-flex items-center rounded-full px-1.5 py-0 text-xs font-medium',
-          'bg-primary/15 text-primary hover:bg-primary/25 transition-colors cursor-help'
-        )}
+        className="inline-flex h-[18px] min-w-[18px] cursor-help items-center justify-center rounded-md bg-accent-soft px-1 text-[11px] font-semibold leading-none text-accent transition-colors duration-micro hover:bg-accent hover:text-primary-fg"
         onMouseEnter={() => setShowPopover(true)}
         onMouseLeave={() => setShowPopover(false)}
         onFocus={() => setShowPopover(true)}
@@ -31,13 +27,9 @@ export default function CitationPill({ chunkId, source, refNum }: CitationPillPr
       {showPopover && source?.text && (
         <span
           role="tooltip"
-          className={cn(
-            'absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-10',
-            'w-64 rounded-md border border-border bg-surface p-2 shadow-md text-xs text-muted',
-            'pointer-events-none'
-          )}
+          className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-72 -translate-x-1/2 rounded-xl border border-border bg-surface p-3 text-left text-xs font-normal leading-relaxed text-text-secondary shadow-lg"
         >
-          <span className="block font-medium text-text mb-1">{source.filename || 'source'}</span>
+          <span className="mb-1 block font-medium text-text">{source.filename || 'source'}</span>
           {source.text.slice(0, 300)}
           {source.text.length > 300 ? '…' : ''}
         </span>

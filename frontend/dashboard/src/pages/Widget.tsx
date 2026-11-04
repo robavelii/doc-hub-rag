@@ -103,7 +103,7 @@ export default function Widget() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Widget Configuration</h1>
+      <h1 className="text-2xl font-semibold mb-6">Widget Configuration</h1>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-4">
           <Card className="p-6 space-y-4">

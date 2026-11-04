@@ -7,9 +7,9 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const sizes = {
-  sm: 'p-1',
-  md: 'p-1.5',
-  lg: 'p-2',
+  sm: 'h-7 w-7',
+  md: 'h-8 w-8',
+  lg: 'h-9 w-9',
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
@@ -20,12 +20,10 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg text-muted',
-        'hover:bg-surface-2/80 hover:text-text',
-        'active:scale-95',
-        'transition-all duration-150',
-        'disabled:opacity-50 disabled:cursor-not-allowed',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
+        'inline-flex shrink-0 items-center justify-center rounded-lg text-muted',
+        'transition-[background-color,color,transform] duration-micro ease-out',
+        'hover:bg-primary-muted hover:text-text active:translate-y-px',
+        'disabled:cursor-not-allowed disabled:opacity-45',
         sizes[size],
         className
       )}

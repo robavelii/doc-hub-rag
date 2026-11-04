@@ -30,7 +30,7 @@ export default function Settings() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+      <h1 className="text-2xl font-semibold mb-6">Settings</h1>
       <div className="flex gap-1 mb-6 border-b border-border overflow-x-auto">
         {visibleTabs.map((t) => (
           <button
@@ -127,7 +127,7 @@ function TeamTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
         <Input placeholder="email@company.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
         <Button onClick={() => void invite()}>Invite</Button>
       </div>
-      {inviteToken && <p className="mt-2 text-xs text-muted font-mono">Token: {inviteToken}</p>}
+      {inviteToken && <p className="mt-2 text-xs text-muted">Token: <code className="font-mono text-text">{inviteToken}</code></p>}
     </Card>
   )
 }
@@ -342,7 +342,7 @@ function SsoTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) {
           <p className="text-sm">Connected ({config.directory.type}). Users and groups sync automatically; removed users lose access immediately.</p>
         ) : scim ? (
           <div className="space-y-2 text-sm">
-            <p>Paste these into your identity provider's SCIM settings. The token is shown once.</p>
+            <p>Paste these into your identity provider’s SCIM settings. The token is shown once.</p>
             <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{scim.scim_endpoint}</pre>
             <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">{scim.scim_token}</pre>
           </div>
@@ -527,7 +527,7 @@ function BillingTab({ toast }: { toast: ReturnType<typeof useToast>['toast'] }) 
       <h3 className="font-semibold mb-2 capitalize">{sub.plan} plan</h3>
       <p className="text-sm text-muted mb-4">Status: {sub.status}</p>
       <UsageBar label="Tokens" used={sub.tokens_used} limit={sub.tokens_limit} />
-      <UsageBar label="Storage" used={sub.storage_used_bytes} limit={sub.storage_limit_bytes} />
+      <UsageBar label="Storage" unit="bytes" used={sub.storage_used_bytes} limit={sub.storage_limit_bytes} />
       <div className="flex gap-2 mt-4">
         {sub.plan === 'free' && <Button onClick={() => void checkout('starter')}>Upgrade to Starter</Button>}
         {sub.plan === 'starter' && <Button onClick={() => void checkout('pro')}>Upgrade to Pro</Button>}

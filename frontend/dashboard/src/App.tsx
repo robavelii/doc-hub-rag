@@ -46,6 +46,7 @@ export default function App() {
                     <Routes>
                       <Route path="/" element={<Navigate to="/chat" />} />
                       <Route path="/chat" element={<Chat />} />
+                      <Route path="/chat/:conversationId" element={<Chat />} />
                       <Route path="/documents" element={<Documents />} />
                       <Route path="/usage" element={<Usage />} />
                       <Route path="/widget" element={<Widget />} />

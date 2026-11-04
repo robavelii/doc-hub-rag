@@ -2,7 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import type { QuerySource } from '@shared/types'
-import { buildSourceIndexMap, splitByCitations } from '../lib/markdown'
+import { buildSourceIndexMap, citationId, citationsToLinks } from '../lib/markdown'
 import CitationPill from './CitationPill'
 
 interface MarkdownAnswerProps {
@@ -11,42 +11,29 @@ interface MarkdownAnswerProps {
 }
 
 export default function MarkdownAnswer({ content, sources }: MarkdownAnswerProps) {
-  const parts = splitByCitations(content)
   const indexMap = buildSourceIndexMap(sources ?? [])
 
   return (
     <div className="prose-chat">
-      {parts.map((part, i) => {
-        if (part.type === 'citation') {
-          const src = sources?.find((s) => s.id === part.chunkId)
-          const refNum = indexMap.get(part.chunkId)
-          return (
-            <CitationPill
-              key={`cite-${i}`}
-              chunkId={part.chunkId}
-              source={src}
-              refNum={refNum}
-            />
-          )
-        }
-        if (!part.value.trim()) return null
-        return (
-          <ReactMarkdown
-            key={`md-${i}`}
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeSanitize]}
-            components={{
-              a: ({ href, children }) => (
-                <a href={href} target="_blank" rel="noopener noreferrer">
-                  {children}
-                </a>
-              ),
-            }}
-          >
-            {part.value}
-          </ReactMarkdown>
-        )
-      })}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        components={{
+          a: ({ href, children }) => {
+            const chunkId = citationId(href)
+            if (chunkId) {
+              return <CitationPill chunkId={chunkId} source={sources?.find((s) => s.id === chunkId)} refNum={indexMap.get(chunkId)} />
+            }
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer">
+                {children}
+              </a>
+            )
+          },
+        }}
+      >
+        {citationsToLinks(content)}
+      </ReactMarkdown>
     </div>
   )
 }

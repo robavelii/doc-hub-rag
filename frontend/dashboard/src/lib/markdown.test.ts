@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSourceIndexMap, splitByCitations, stripCitations } from './markdown'
+import { buildSourceIndexMap, citationId, citationsToLinks, splitByCitations, stripCitations } from './markdown'
 
 describe('splitByCitations', () => {
   it('splits text around citation markers', () => {
@@ -33,5 +33,18 @@ describe('buildSourceIndexMap', () => {
 describe('stripCitations', () => {
   it('removes citation markers from content', () => {
     expect(stripCitations('Answer [source:abc] here')).toBe('Answer  here')
+  })
+})
+
+describe('citationsToLinks', () => {
+  it('rewrites markers to inline links that round-trip the chunk id', () => {
+    const md = citationsToLinks('Leave is 25 days [source:c-1/x] per year.')
+    expect(md).toBe('Leave is 25 days [cite](#cite-c-1%2Fx) per year.')
+    expect(citationId('#cite-c-1%2Fx')).toBe('c-1/x')
+  })
+
+  it('ignores ordinary links', () => {
+    expect(citationId('https://example.com')).toBeNull()
+    expect(citationId(undefined)).toBeNull()
   })
 })

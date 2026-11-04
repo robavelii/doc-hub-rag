@@ -46,9 +46,8 @@ export function Modal({ open, onClose, children, title, description, size = 'md'
       onClick={(e) => {
         if (e.target === overlayRef.current) onClose()
       }}
-      style={{ animation: 'modalBackdrop 250ms ease-out forwards' }}
     >
-      <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
+      <div className="absolute inset-0 bg-scrim/45 animate-fade-in" aria-hidden="true" />
 
       <div
         ref={dialogRef}
@@ -58,14 +57,13 @@ export function Modal({ open, onClose, children, title, description, size = 'md'
         aria-describedby={description ? 'modal-description' : undefined}
         tabIndex={-1}
         className={cn(
-          'relative w-full rounded-2xl p-6',
-          'glass shadow-lg',
-          'animate-scale-in',
+          'relative w-full rounded-2xl border border-border bg-surface p-6 shadow-lg',
+          'animate-fade-in focus:outline-none',
           sizes[size],
           className
         )}
       >
-        {(title || true) && (
+        {(
           <div className="flex items-start justify-between mb-4">
             <div>
               {title && (
